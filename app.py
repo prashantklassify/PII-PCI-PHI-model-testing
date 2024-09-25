@@ -2,10 +2,10 @@ import streamlit as st
 from transformers import pipeline
 
 # Load NER models from Hugging Face
-pii_model = pipeline("ner", model="path/to/pii-model")
-phi_model = pipeline("ner", model="path/to/phi-model")
-pci_model = pipeline("ner", model="path/to/pci-model")
-medical_ner_model = pipeline("ner", model="path/to/medical-ner-model")
+pii_model = pipeline("ner", model="iiiorg/piiranha-v1-detect-personal-information")
+pci_model = pipeline("ner", model="lakshyakh93/deberta_finetuned_pii")
+phi_model = pipeline("ner", model="obi/deid_roberta_i2b2")
+medical_ner_model = pipeline("ner", model="blaze999/Medical-NER")
 
 # Function to safely extract entity groups, handling missing keys
 def get_entity_group(token):
