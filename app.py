@@ -1,11 +1,15 @@
 import streamlit as st
 from transformers import pipeline
 
+# Load NER models from Hugging Face
+pii_model = pipeline("ner", model="path/to/pii-model")
+phi_model = pipeline("ner", model="path/to/phi-model")
+pci_model = pipeline("ner", model="path/to/pci-model")
+medical_ner_model = pipeline("ner", model="path/to/medical-ner-model")
 
-pii_model = pipeline("ner", model="iiiorg/piiranha-v1-detect-personal-information")
-pci_model = pipeline("ner", model="lakshyakh93/deberta_finetuned_pii")
-phi_model = pipeline("ner", model="obi/deid_roberta_i2b2")
-medical_ner_model = pipeline("ner", model="blaze999/Medical-NER")
+# Function to safely extract entity groups, handling missing keys
+def get_entity_group(token):
+    return token.get('entity_group', 'UNKNOWN')
 
 # Function to run all NER models on the input text
 def run_ner_models(text):
@@ -15,7 +19,7 @@ def run_ner_models(text):
     pci_results = pci_model(text)
     
     # Check if there are significant PHI tokens to run medical NER
-    significant_phi_tokens = [token for token in phi_results if token['entity_group'] in ['PATIENT', 'LOC', 'ID']]
+    significant_phi_tokens = [token for token in phi_results if get_entity_group(token) in ['PATIENT', 'LOC', 'ID']]
     if len(significant_phi_tokens) > 5:
         medical_results = medical_ner_model(text)
     else:
@@ -52,7 +56,7 @@ def resolve_conflicts(pii, phi, pci, medical):
 # Function to mark tokens in the text dynamically with different colors for each category
 def mark_text(text, tokens, label_colors):
     for token in tokens:
-        label = token['entity_group']
+        label = get_entity_group(token)
         word = token['word']
         color = label_colors.get(label, "#ffffff")  # Default color if no label found
         text = text.replace(word, f'<mark style="background-color:{color};">{word} ({label})</mark>')
@@ -80,13 +84,16 @@ if input_text:
     st.subheader("NER Results")
 
     # Run all NER models on the input text
-    pii_results, phi_results, pci_results, medical_results = run_ner_models(input_text)
+    try:
+        pii_results, phi_results, pci_results, medical_results = run_ner_models(input_text)
 
-    # Resolve token conflicts
-    resolved_tokens = resolve_conflicts(pii_results, phi_results, pci_results, medical_results)
+        # Resolve token conflicts
+        resolved_tokens = resolve_conflicts(pii_results, phi_results, pci_results, medical_results)
 
-    # Mark the text with detected entities
-    highlighted_text = mark_text(input_text, resolved_tokens, label_colors)
+        # Mark the text with detected entities
+        highlighted_text = mark_text(input_text, resolved_tokens, label_colors)
 
-    # Display the marked text in the Streamlit app
-    st.markdown(highlighted_text, unsafe_allow_html=True)
+        # Display the marked text in the Streamlit app
+        st.markdown(highlighted_text, unsafe_allow_html=True)
+    except KeyError as e:
+        st.error(f"An error occurred while processing: {e}")
