@@ -8,6 +8,13 @@ pci_model = pipeline("ner", model="lakshyakh93/deberta_finetuned_pii")
 phi_model = pipeline("ner", model="obi/deid_roberta_i2b2")
 medical_ner_model = pipeline("ner", model="blaze999/Medical-NER")
 
+# Common tokens to filter out from results
+common_tokens = set([
+    'accountnum', 'creditcardnumber', 'idcardnumber',
+    'email', 'telephonenumber', 'dateofbirth', 'surname',
+    'givenname', 'buildingnum', 'street', 'city', 'zipcode'
+])
+
 # Function to process the document through the NER pipeline
 def process_ner_pipeline(text):
     results = {
@@ -23,11 +30,8 @@ def process_ner_pipeline(text):
 
     # Step 2: PCI detection
     pci_related_tokens = {
-        'accountnum': 'Account-related information',
-        'creditcardnumber': 'Financial data',
-        'idcardnumber': 'Account-related information',
-        'email': 'Contact information',
-        'telephonenumber': 'Contact information',
+        'accountnum', 'creditcardnumber', 'idcardnumber', 
+        'email', 'telephonenumber'
     }
 
     # Check if any PII tokens should be classified as PCI
@@ -39,10 +43,20 @@ def process_ner_pipeline(text):
     phi_results = phi_model(text)
     results["PHI"] = [r['word'] for r in phi_results]
 
-    # Analyze Medical NER if conditions are met
-    if len(results["PHI"]) > len(results["PII"]) and len(results["PHI"]) > len(results["PCI"]):
-        medical_results = medical_ner_model(text)
-        results["Medical NER"] = [r['word'] for r in medical_results]
+    # Filter out common tokens from results
+    results["PII"] = [token for token in results["PII"] if token.lower() not in common_tokens]
+    results["PCI"] = [token for token in results["PCI"] if token.lower() not in common_tokens]
+    results["PHI"] = [token for token in results["PHI"] if token.lower() not in common_tokens]
+
+    # Prioritize PCI if all models return common tokens
+    if results["PCI"]:
+        results["PII"] = []  # Clear PII if PCI tokens are found
+        results["PHI"] = []  # Clear PHI if PCI tokens are found
+    else:
+        # Analyze Medical NER if conditions are met
+        if len(results["PHI"]) > len(results["PII"]) and len(results["PHI"]) > len(results["PCI"]):
+            medical_results = medical_ner_model(text)
+            results["Medical NER"] = [r['word'] for r in medical_results]
 
     return results
 
@@ -74,11 +88,14 @@ st.title("Dynamic NER Detection in Text")
 user_input = st.text_area("Enter text here:", height=300)
 
 if st.button("Analyze"):
+    # Clean input text to prevent unwanted characters
+    cleaned_input = re.sub(r'[^\w\s.,-]', '', user_input)  # Keep only words, spaces, commas, periods, and hyphens
+
     # Run NER pipeline
-    tokens = process_ner_pipeline(user_input)
+    tokens = process_ner_pipeline(cleaned_input)
     
     # Highlight detected tokens in the text
-    highlighted_text = highlight_text(user_input, tokens)
+    highlighted_text = highlight_text(cleaned_input, tokens)
     
     # Display the highlighted text
     st.markdown("### Analyzed Text:")
