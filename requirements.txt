@@ -1,5 +1,5 @@
-streamlit==1.19.0         # Streamlit framework for building the web app
-transformers==4.25.1      # Hugging Face library for NLP models
-pdfplumber==0.7.4         # PDFPlumber for extracting text from PDF files
-python-docx==0.8.11      # For reading Word (.docx) files
-torch==1.13.0             # PyTorch, required by Hugging Face models (check compatibility)
+streamlit       # Streamlit framework for building the web app
+transformers     # Hugging Face library for NLP models
+pdfplumber       # PDFPlumber for extracting text from PDF files
+python-docx    # For reading Word (.docx) files
+torch           # PyTorch, required by Hugging Face models (check compatibility)
