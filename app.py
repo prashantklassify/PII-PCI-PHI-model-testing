@@ -1,119 +1,84 @@
 import streamlit as st
 from transformers import pipeline
-import re
+from itertools import chain
+import spacy
 
-# Load Hugging Face models
-pii_model = pipeline("ner", model="iiiorg/piiranha-v1-detect-personal-information")
-pci_model = pipeline("ner", model="lakshyakh93/deberta_finetuned_pii")
-phi_model = pipeline("ner", model="obi/deid_roberta_i2b2")
-medical_ner_model = pipeline("ner", model="blaze999/Medical-NER")
+# Load NER models from Hugging Face
+pii_ner = pipeline("ner", model="your-pii-model")
+phi_ner = pipeline("ner", model="your-phi-model")
+hipaa_ner = pipeline("ner", model="your-hipaa-model")
+medical_ner = pipeline("ner", model="your-medical-model")
 
-# Common tokens to filter out from results
-common_tokens = set([
-    'accountnum', 'creditcardnumber', 'idcardnumber',
-    'email', 'telephonenumber', 'dateofbirth', 'surname',
-    'givenname', 'buildingnum', 'street', 'city', 'zipcode'
-])
+# Categories for classification
+PCI_CATEGORIES = [
+    "Account name", "Account number", "Transaction amounts", "BIC", "IBAN",
+    "Credit card number", "CVV", "Email", "SSN", "MAC addresses", "IP addresses"
+]
+PHI_CATEGORIES = ["DATE", "STAFF", "AGE", "LOC", "PATIENT", "PHONE", "ID", "EMAIL"]
 
-# Function to process the document through the NER pipeline
-def process_ner_pipeline(text):
-    results = {
-        "PII": [],
-        "PCI": [],
-        "PHI": [],
-        "Medical NER": []
-    }
+# Function to highlight text
+def highlight_text(text, spans):
+    for span in sorted(spans, key=lambda x: x['start'], reverse=True):
+        label = span['entity']
+        category = span['category']
+        text = text[:span['start']] + f"**[{label}]**({category})" + text[span['end']:]
+    return text
 
-    # Step 1: PII detection
-    pii_results = pii_model(text)
-    results["PII"] = [r['word'] for r in pii_results]
-
-    # Step 2: PCI detection
-    pci_related_tokens = {
-        'accountnum', 'creditcardnumber', 'idcardnumber', 
-        'email', 'telephonenumber'
-    }
-
-    # Check if any PII tokens should be classified as PCI
-    for token in results["PII"]:
-        if token.lower() in pci_related_tokens:
-            results["PCI"].append(token)
-
-    # Step 3: PHI detection
-    phi_results = phi_model(text)
-    results["PHI"] = [r['word'] for r in phi_results]
-
-    # Filter out common tokens from results
-    results["PII"] = [token for token in results["PII"] if token.lower() not in common_tokens]
-    results["PCI"] = [token for token in results["PCI"] if token.lower() not in common_tokens]
-    results["PHI"] = [token for token in results["PHI"] if token.lower() not in common_tokens]
-
-    # Prioritize PCI if all models return common tokens
-    if results["PCI"]:
-        results["PII"] = []  # Clear PII if PCI tokens are found
-        results["PHI"] = []  # Clear PHI if PCI tokens are found
-    else:
-        # Analyze Medical NER if conditions are met
-        if len(results["PHI"]) > len(results["PII"]) and len(results["PHI"]) > len(results["PCI"]):
-            medical_results = medical_ner_model(text)
-            results["Medical NER"] = [r['word'] for r in medical_results]
-
-    return results
-
-# Function to highlight text with color coding
-def highlight_text(text, tokens):
-    highlighted_text = text
-    # Highlight PII tokens
-    for word in tokens["PII"]:
-        highlighted_text = re.sub(r'\b' + re.escape(word) + r'\b', 
-                                   f'<mark style="background-color: yellow;">{word}</mark>', highlighted_text)
-    # Highlight PCI tokens
-    for word in tokens["PCI"]:
-        highlighted_text = re.sub(r'\b' + re.escape(word) + r'\b', 
-                                   f'<mark style="background-color: red;">{word}</mark>', highlighted_text)
-    # Highlight PHI tokens
-    for word in tokens["PHI"]:
-        highlighted_text = re.sub(r'\b' + re.escape(word) + r'\b', 
-                                   f'<mark style="background-color: green;">{word}</mark>', highlighted_text)
-    # Highlight Medical NER tokens
-    for word in tokens["Medical NER"]:
-        highlighted_text = re.sub(r'\b' + re.escape(word) + r'\b', 
-                                   f'<mark style="background-color: blue;">{word}</mark>', highlighted_text)
-    return highlighted_text
-
-# Streamlit UI
-st.title("Dynamic NER Detection in Text")
-
-# Text area for user input
-user_input = st.text_area("Enter text here:", height=300)
-
-if st.button("Analyze"):
-    # Clean input text to prevent unwanted characters
-    cleaned_input = re.sub(r'[^\w\s.,-]', '', user_input)  # Keep only words, spaces, commas, periods, and hyphens
-
-    # Run NER pipeline
-    tokens = process_ner_pipeline(cleaned_input)
+# Define a function to resolve token overlap by prioritizing
+def resolve_overlap(spans):
+    spans = sorted(spans, key=lambda x: (x['start'], -x['end']))  # Sort by start and end positions
+    resolved_spans = []
+    current_end = -1
     
-    # Highlight detected tokens in the text
-    highlighted_text = highlight_text(cleaned_input, tokens)
+    for span in spans:
+        if span['start'] >= current_end:  # No overlap
+            resolved_spans.append(span)
+            current_end = span['end']
+        else:
+            # If there's an overlap, prioritize based on model or category (can be customized)
+            pass
     
-    # Display the highlighted text
-    st.markdown("### Analyzed Text:")
-    st.markdown(highlighted_text, unsafe_allow_html=True)
+    return resolved_spans
 
-    # Display categories found
-    st.write("### Detected Categories:")
-    for category, words in tokens.items():
-        if words:
-            st.write(f"{category}: {', '.join(words)}")
+# Define function to map tokens to the correct category (e.g., PCI/PHI/PII)
+def classify_tokens(text, pii_entities, phi_entities, hipaa_entities, medical_entities):
+    all_entities = []
 
-# Information on token categories for user reference
-st.sidebar.title("Token Categories")
-st.sidebar.write("**PII (Personally Identifiable Information):**")
-st.sidebar.write("Names, emails, phone numbers, etc.")
-st.sidebar.write("**PCI (Payment Card Information):**")
-st.sidebar.write("Credit card numbers, account numbers, etc.")
-st.sidebar.write("**PHI (Protected Health Information):**")
-st.sidebar.write("Patient data, health records, etc.")
-st.sidebar.write("**Medical NER:**")
-st.sidebar.write("Medical-related information, conditions, etc.")
+    # Combine results from all NER models
+    for entity in chain(pii_entities, phi_entities, hipaa_entities, medical_entities):
+        category = "Unknown"
+        if entity['entity'] in PCI_CATEGORIES:
+            category = "PCI"
+        elif entity['entity'] in PHI_CATEGORIES:
+            category = "PHI"
+        # Add more rules as needed for HIPAA and medical
+        all_entities.append({
+            'start': entity['start'],
+            'end': entity['end'],
+            'entity': entity['entity'],
+            'category': category
+        })
+
+    # Resolve overlapping tokens
+    resolved_entities = resolve_overlap(all_entities)
+    return resolved_entities
+
+# Streamlit interface
+st.title("NER Text Classifier")
+
+# Text input
+text = st.text_area("Enter your text here:")
+
+if text:
+    # Run NER models
+    pii_entities = pii_ner(text)
+    phi_entities = phi_ner(text)
+    hipaa_entities = hipaa_ner(text)
+    medical_entities = medical_ner(text) if len(phi_entities) > 5 else []  # Run medical NER only if needed
+
+    # Classify and annotate the text
+    entities = classify_tokens(text, pii_entities, phi_entities, hipaa_entities, medical_entities)
+    highlighted_text = highlight_text(text, entities)
+
+    # Display annotated text
+    st.markdown(highlighted_text)
