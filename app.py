@@ -6,39 +6,44 @@ import re
 pii_model = pipeline("ner", model="iiiorg/piiranha-v1-detect-personal-information")
 pci_model = pipeline("ner", model="lakshyakh93/deberta_finetuned_pii")
 phi_model = pipeline("ner", model="obi/deid_roberta_i2b2")
+medical_ner_model = pipeline("ner", model="blaze999/Medical-NER")
 
 # Function to process the document through the NER pipeline
 def process_ner_pipeline(text):
     results = {
         "PII": [],
         "PCI": [],
-        "PHI": []
+        "PHI": [],
+        "Medical NER": []
     }
-    
+
     # Step 1: PII detection
     pii_results = pii_model(text)
     results["PII"] = [r['word'] for r in pii_results]
-    
-    # Define PCI-related tokens
+
+    # Step 2: PCI detection
     pci_related_tokens = {
         'accountnum': 'Account-related information',
         'creditcardnumber': 'Financial data',
         'idcardnumber': 'Account-related information',
         'email': 'Contact information',
         'telephonenumber': 'Contact information',
-        # Add more as needed
     }
-    
+
     # Check if any PII tokens should be classified as PCI
     for token in results["PII"]:
         if token.lower() in pci_related_tokens:
             results["PCI"].append(token)
-    
-    # Step 2: PHI detection if no PCI-related tokens found
-    if not results["PCI"]:
-        phi_results = phi_model(text)
-        results["PHI"] = [r['word'] for r in phi_results]
-    
+
+    # Step 3: PHI detection
+    phi_results = phi_model(text)
+    results["PHI"] = [r['word'] for r in phi_results]
+
+    # Analyze Medical NER if conditions are met
+    if len(results["PHI"]) > len(results["PII"]) and len(results["PHI"]) > len(results["PCI"]):
+        medical_results = medical_ner_model(text)
+        results["Medical NER"] = [r['word'] for r in medical_results]
+
     return results
 
 # Function to highlight text with color coding
@@ -56,6 +61,10 @@ def highlight_text(text, tokens):
     for word in tokens["PHI"]:
         highlighted_text = re.sub(r'\b' + re.escape(word) + r'\b', 
                                    f'<mark style="background-color: green;">{word}</mark>', highlighted_text)
+    # Highlight Medical NER tokens
+    for word in tokens["Medical NER"]:
+        highlighted_text = re.sub(r'\b' + re.escape(word) + r'\b', 
+                                   f'<mark style="background-color: blue;">{word}</mark>', highlighted_text)
     return highlighted_text
 
 # Streamlit UI
@@ -89,3 +98,5 @@ st.sidebar.write("**PCI (Payment Card Information):**")
 st.sidebar.write("Credit card numbers, account numbers, etc.")
 st.sidebar.write("**PHI (Protected Health Information):**")
 st.sidebar.write("Patient data, health records, etc.")
+st.sidebar.write("**Medical NER:**")
+st.sidebar.write("Medical-related information, conditions, etc.")
