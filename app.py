@@ -1,75 +1,70 @@
 import streamlit as st
-import pdfplumber  # Use PDFPlumber for PDF extraction
-import docx  # python-docx for Word file extraction
-import os
 from transformers import pipeline
+import re
 
 # Load Hugging Face models
 pii_model = pipeline("ner", model="iiiorg/piiranha-v1-detect-personal-information")
 pci_model = pipeline("ner", model="lakshyakh93/deberta_finetuned_pii")
 phi_model = pipeline("ner", model="obi/deid_roberta_i2b2")
-medical_ner_model = pipeline("ner", model="blaze999/Medical-NER")
-
-# Function to extract text from different file formats
-def extract_text_from_file(file_path):
-    ext = os.path.splitext(file_path)[1]
-    text = ""
-    
-    if ext == '.pdf':
-        with pdfplumber.open(file_path) as pdf:
-            for page in pdf.pages:
-                text += page.extract_text() + '\n'
-    elif ext == '.docx':
-        doc = docx.Document(file_path)
-        for para in doc.paragraphs:
-            text += para.text + '\n'
-    elif ext in ['.txt', '.csv']:
-        with open(file_path, 'r', encoding='utf-8') as file:
-            text = file.read()
-    return text
 
 # Function to process the document through the NER pipeline
 def process_ner_pipeline(text):
+    results = {
+        "PII": [],
+        "PCI": [],
+        "PHI": []
+    }
+    
     # Step 1: PII detection
     pii_results = pii_model(text)
-    pii_tokens = [r['word'] for r in pii_results]
+    results["PII"] = [r['word'] for r in pii_results]
     
     # If certain tokens are found, it goes to PCI
     pci_tokens = {'accountnum', 'creditcardnumber', 'idcardnumber'}
-    if any(token in pii_tokens for token in pci_tokens):
+    if any(token in results["PII"] for token in pci_tokens):
         pci_results = pci_model(text)
-        return 'PCI', pci_results
+        results["PCI"] = [r['word'] for r in pci_results]
 
     # Step 2: PHI detection if no PCI-related tokens found
-    phi_results = phi_model(text)
-    if phi_results:
-        # If PHI is detected, go to medical NER model
-        medical_results = medical_ner_model(text)
-        return 'Medical NER', medical_results
+    if not results["PCI"]:
+        phi_results = phi_model(text)
+        results["PHI"] = [r['word'] for r in phi_results]
     
-    # Default if no PHI is detected
-    return 'PHI', phi_results
+    return results
+
+# Function to highlight text with color coding
+def highlight_text(text, tokens):
+    for category, words in tokens.items():
+        for word in words:
+            # Create regex pattern to find the word and highlight it
+            pattern = re.escape(word)
+            if category == "PII":
+                text = re.sub(r'\b' + pattern + r'\b', f'<mark style="background-color: yellow;">{word}</mark>', text)
+            elif category == "PCI":
+                text = re.sub(r'\b' + pattern + r'\b', f'<mark style="background-color: red;">{word}</mark>', text)
+            elif category == "PHI":
+                text = re.sub(r'\b' + pattern + r'\b', f'<mark style="background-color: green;">{word}</mark>', text)
+    return text
 
 # Streamlit UI
-st.title("NER Pipeline Testing")
+st.title("Real-Time Text Editor with NER Detection")
 
-# File uploader
-uploaded_file = st.file_uploader("Choose a file", type=['pdf', 'docx', 'txt', 'csv'])
+# Text area for user input
+user_input = st.text_area("Enter text here:", height=300)
 
-if uploaded_file is not None:
-    # Save uploaded file temporarily
-    with open(uploaded_file.name, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    
-    # Extract and display text
-    extracted_text = extract_text_from_file(uploaded_file.name)
-    st.write("Extracted Text:")
-    st.write(extracted_text)
-
+if st.button("Analyze"):
     # Run NER pipeline
-    category, ner_results = process_ner_pipeline(extracted_text)
-    st.write(f"Document Category: {category}")
+    tokens = process_ner_pipeline(user_input)
     
-    st.write("Named Entities:")
-    for result in ner_results:
-        st.write(f"{result['word']} - {result['entity']}")
+    # Highlight detected tokens in the text
+    highlighted_text = highlight_text(user_input, tokens)
+    
+    # Display the highlighted text
+    st.markdown("### Analyzed Text:")
+    st.markdown(highlighted_text, unsafe_allow_html=True)
+
+    # Display categories found
+    st.write("### Detected Categories:")
+    for category, words in tokens.items():
+        if words:
+            st.write(f"{category}: {', '.join(words)}")
