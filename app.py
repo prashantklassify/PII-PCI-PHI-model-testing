@@ -1,13 +1,11 @@
 import streamlit as st
 from transformers import pipeline
 
-# Load NER models
-pii_model = pipeline("ner", model="path/to/pii-model")
-phi_model = pipeline("ner", model="path/to/phi-model")
-pci_model = pipeline("ner", model="path/to/pci-model")
-medical_ner_model = pipeline("ner", model="path/to/medical-ner-model")
 
-
+pii_model = pipeline("ner", model="iiiorg/piiranha-v1-detect-personal-information")
+pci_model = pipeline("ner", model="lakshyakh93/deberta_finetuned_pii")
+phi_model = pipeline("ner", model="obi/deid_roberta_i2b2")
+medical_ner_model = pipeline("ner", model="blaze999/Medical-NER")
 
 # Function to run all NER models on the input text
 def run_ner_models(text):
@@ -92,5 +90,3 @@ if input_text:
 
     # Display the marked text in the Streamlit app
     st.markdown(highlighted_text, unsafe_allow_html=True)
-
-
