@@ -1,5 +1,3 @@
-streamlit       # Streamlit framework for building the web app
-transformers     # Hugging Face library for NLP models
-pdfplumber       # PDFPlumber for extracting text from PDF files
-python-docx    # For reading Word (.docx) files
-torch           # PyTorch, required by Hugging Face models (check compatibility)
+streamlit
+transformers
+torch
