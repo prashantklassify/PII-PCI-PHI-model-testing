@@ -8,7 +8,10 @@ pii_ner = pipeline("ner", model="your-pii-model")
 phi_ner = pipeline("ner", model="your-phi-model")
 hipaa_ner = pipeline("ner", model="your-hipaa-model")
 medical_ner = pipeline("ner", model="your-medical-model")
-
+pii_ner = pipeline("ner", model="iiiorg/piiranha-v1-detect-personal-information")
+pci_ner = pipeline("ner", model="lakshyakh93/deberta_finetuned_pii")
+phi_ner = pipeline("ner", model="obi/deid_roberta_i2b2")
+medical_ner = pipeline("ner", model="blaze999/Medical-NER")
 # Categories for classification
 PCI_CATEGORIES = [
     "Account name", "Account number", "Transaction amounts", "BIC", "IBAN",
