@@ -1,5 +1,5 @@
 import streamlit as st
-import fitz  # PyMuPDF for PDF extraction
+import pdfplumber  # Use PDFPlumber for PDF extraction
 import docx  # python-docx for Word file extraction
 import os
 from transformers import pipeline
@@ -16,13 +16,13 @@ def extract_text_from_file(file_path):
     text = ""
     
     if ext == '.pdf':
-        doc = fitz.open(file_path)
-        for page in doc:
-            text += page.get_text()
+        with pdfplumber.open(file_path) as pdf:
+            for page in pdf.pages:
+                text += page.extract_text() + '\n'
     elif ext == '.docx':
         doc = docx.Document(file_path)
         for para in doc.paragraphs:
-            text += para.text
+            text += para.text + '\n'
     elif ext in ['.txt', '.csv']:
         with open(file_path, 'r', encoding='utf-8') as file:
             text = file.read()
