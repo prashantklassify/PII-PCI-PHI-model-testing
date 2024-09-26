@@ -28,18 +28,11 @@ def format_ner_results_as_table(ner_results):
         entity_list.append({
             "Entity": token,
             "Entity Type": entity_type,
-            "Confidence (%)": confidence
+            "Confidence (%)": f"{confidence:.2f}"
         })
     
     # Convert list to DataFrame for tabular display
-    df = pd.DataFrame(entity_list)
-    
-    # Group by entity and entity type, and calculate the mean confidence
-    grouped_df = df.groupby(["Entity", "Entity Type"]).agg(
-        {"Confidence (%)": "mean"}
-    ).reset_index()
-    
-    return grouped_df
+    return pd.DataFrame(entity_list)
 
 # Function to filter predictions by confidence threshold
 def filter_by_confidence(predictions, threshold=0.5):
@@ -69,7 +62,7 @@ if st.button("Run NER Models"):
         # Filter predictions by confidence
         filtered_predictions = filter_by_confidence(predictions, confidence_threshold)
 
-        # Convert NER results to a table format with merged entities and average confidence
+        # Convert NER results to a table format
         if filtered_predictions:
             ner_table = format_ner_results_as_table(filtered_predictions)
             st.table(ner_table)
