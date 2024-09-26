@@ -18,7 +18,7 @@ def clean_token(token):
 # Function to format NER results into a DataFrame
 def reformat(ner_results):
     entity_list = []
-
+    
     for entity in ner_results:
         token = clean_token(entity['word'])
         confidence = entity['score'] * 100  # Convert to percentage
@@ -28,21 +28,11 @@ def reformat(ner_results):
         entity_list.append({
             "Entity": token,
             "Entity Type": entity_type,
-            "Confidence (%)": confidence
+            "Confidence (%)": f"{confidence:.2f}"
         })
     
     # Convert list to DataFrame for tabular display
-    df = pd.DataFrame(entity_list)
-    
-    # Merge consecutive rows with the same entity
-    merged_df = df.groupby(['Entity', 'Entity Type']).agg({
-        'Confidence (%)': 'mean'  # Average confidence
-    }).reset_index()
-
-    # Convert Confidence back to formatted string
-    merged_df['Confidence (%)'] = merged_df['Confidence (%)'].apply(lambda x: f"{x:.2f}")
-    
-    return merged_df
+    return pd.DataFrame(entity_list)
 
 # Function to filter predictions by confidence threshold
 def filter_by_confidence(predictions, threshold=0.5):
@@ -74,7 +64,7 @@ if st.button("Run NER Models"):
 
         # Convert NER results to a table format
         if filtered_predictions:
-            ner_table = reformat(filtered_predictions)
-            st.table(ner_table)
+            ner_table = format_ner_results_as_table(filtered_predictions)
+            st.table(reformat(ner_table))
         else:
             st.write(f"No entities detected above the confidence threshold for {model_name}.")
