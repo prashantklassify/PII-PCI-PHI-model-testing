@@ -17,7 +17,7 @@ model_phi = pipeline("token-classification", model=models["PHI"])
 model_medical = pipeline("token-classification", model=models["Medical NER"])
 
 # Define accepted tokens
-accepted_pii_labels = {"ALL CATEGORIES UNDER PII"}  # Specify all accepted PII labels if needed
+accepted_pii_labels = {"ACCOUNTNUM","BUILDINGNUM","CITY,","CREDITCARDNUMBER","DATEOFBIRTH","DRIVERLICENSENUM","EMAIL","GIVENNAME","IDCARDNUM","PASSWORD","SOCIALNUM","STREET","SURNAME","TAXNUM","TELEPHONENUM","USERNAME","ZIPCODE"} 
 accepted_pci_labels = {
     "JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
     "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6",
