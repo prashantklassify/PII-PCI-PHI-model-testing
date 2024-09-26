@@ -5,9 +5,32 @@ import pandas as pd
 # Define the models for NER
 models = {
     "PII": "iiiorg/piiranha-v1-detect-personal-information",
+    "PCI": "lakshyakh93/deberta_finetuned_pii",
     "PHI": "obi/deid_roberta_i2b2",
-    "Medical NER": "blaze999/Medical-NER",
-    "PCI": "lakshyakh93/deberta_finetuned_pii"
+    "Medical NER": "blaze999/Medical-NER"
+}
+
+# Load the models
+model_pii = pipeline("token-classification", model=models["PII"])
+model_pci = pipeline("token-classification", model=models["PCI"])
+model_phi = pipeline("token-classification", model=models["PHI"])
+model_medical = pipeline("token-classification", model=models["Medical NER"])
+
+# Define accepted tokens
+accepted_pii_labels = {"ALL CATEGORIES UNDER PII"}  # Specify all accepted PII labels if needed
+accepted_pci_labels = {
+    "JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
+    "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6",
+    "CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD",
+    "PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE",
+    "LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV",
+    "NEARBYGPSCOORDINATE", "SEXTYPE"
+}
+accepted_phi_labels = {"staff", "HOSP", "AGE"}
+accepted_medical_labels = {
+    "BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT",
+    "DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE",
+    "MASS", "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"
 }
 
 # Function to clean tokens
@@ -39,6 +62,30 @@ def filter_by_confidence(predictions, threshold=0.5):
     """Filter predictions to only include those with a confidence above the threshold."""
     return [prediction for prediction in predictions if prediction['score'] > threshold]
 
+# Custom NER pipeline function
+def custom_pipeline(text):
+    # Run the text through the PII model
+    pii_results = model_pii(text)
+    filtered_pii_results = [res for res in pii_results if res['label'] in accepted_pii_labels]
+
+    # If PII labels are detected, process with the PCI model
+    if filtered_pii_results:
+        pci_results = model_pci(text)
+        filtered_pci_results = [res for res in pci_results if res['label'] in accepted_pci_labels]
+        return filtered_pci_results
+
+    # If no PII labels found, process with the PHI model
+    phi_results = model_phi(text)
+    filtered_phi_results = [res for res in phi_results if res['label'] in accepted_phi_labels]
+
+    # If PHI results have unique tokens, proceed to the Medical model
+    if filtered_phi_results:
+        medical_results = model_medical(text)
+        filtered_medical_results = [res for res in medical_results if res['label'] in accepted_medical_labels]
+        return filtered_medical_results
+    
+    return filtered_phi_results  # Return PHI results if no other conditions are met
+
 # Streamlit App Layout
 st.title("Named Entity Recognition (NER) Streamlit App")
 
@@ -50,21 +97,17 @@ confidence_threshold = st.slider("Confidence Threshold", min_value=0.0, max_valu
 
 # Button to process the text
 if st.button("Run NER Models"):
-    for model_name, model_path in models.items():
-        st.subheader(f"{model_name} Model Results")
+    st.subheader("Custom NER Pipeline Results")
+    
+    # Run the custom pipeline
+    predictions = custom_pipeline(text)
 
-        # Load the model
-        pipe = pipeline("token-classification", model=model_path)
-        
-        # Get predictions
-        predictions = pipe(text)
+    # Filter predictions by confidence
+    filtered_predictions = filter_by_confidence(predictions, confidence_threshold)
 
-        # Filter predictions by confidence
-        filtered_predictions = filter_by_confidence(predictions, confidence_threshold)
-
-        # Convert NER results to a table format
-        if filtered_predictions:
-            ner_table = format_ner_results_as_table(filtered_predictions)
-            st.table(ner_table)
-        else:
-            st.write(f"No entities detected above the confidence threshold for {model_name}.")
+    # Convert NER results to a table format
+    if filtered_predictions:
+        ner_table = format_ner_results_as_table(filtered_predictions)
+        st.table(ner_table)
+    else:
+        st.write("No entities detected above the confidence threshold.")
