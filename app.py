@@ -1,5 +1,6 @@
 import streamlit as st
 from transformers import pipeline
+import pandas as pd
 
 # Define the models for NER
 models = {
@@ -14,39 +15,24 @@ def clean_token(token):
     """Clean token by removing unwanted characters like '▁' and 'Ġ'."""
     return token.replace("▁", "").replace("Ġ", "")
 
-# Function to format NER results
-def format_ner_results(ner_results, model_name):
-    formatted_output = f"### {model_name} Results ###\n"
-    entity_buffer = ""
-    confidences = []
-    last_entity_type = None
-
+# Function to format NER results into a DataFrame
+def format_ner_results_as_table(ner_results):
+    entity_list = []
+    
     for entity in ner_results:
-        token = clean_token(entity['word'])  # Clean the token
+        token = clean_token(entity['word'])
         confidence = entity['score'] * 100  # Convert to percentage
-        entity_type = entity['entity']
-
-        # If continuing the same entity type, concatenate tokens
-        if last_entity_type and last_entity_type.split("-")[-1] == entity_type.split("-")[-1]:
-            entity_buffer += token
-            confidences.append(confidence)
-        else:
-            # If a new entity starts, print the previous one
-            if entity_buffer:
-                avg_confidence = sum(confidences) / len(confidences)
-                formatted_output += f"- **{entity_buffer}**\n  - Confidence: {', '.join([f'{c:.2f}%' for c in confidences])}\n  - Detected as: {last_entity_type.split('-')[-1]}\n"
-            
-            # Start a new entity
-            entity_buffer = token
-            confidences = [confidence]
-        last_entity_type = entity_type
-
-    # Output the last entity if available
-    if entity_buffer:
-        avg_confidence = sum(confidences) / len(confidences)
-        formatted_output += f"- **{entity_buffer}**\n  - Confidence: {', '.join([f'{c:.2f}%' for c in confidences])}\n  - Detected as: {last_entity_type.split('-')[-1]}\n"
-
-    return formatted_output
+        entity_type = entity['entity'].split("-")[-1]  # Get entity type
+        
+        # Append to the list as a dictionary
+        entity_list.append({
+            "Entity": token,
+            "Entity Type": entity_type,
+            "Confidence (%)": f"{confidence:.2f}"
+        })
+    
+    # Convert list to DataFrame for tabular display
+    return pd.DataFrame(entity_list)
 
 # Function to filter predictions by confidence threshold
 def filter_by_confidence(predictions, threshold=0.5):
@@ -76,7 +62,10 @@ if st.button("Run NER Models"):
         # Filter predictions by confidence
         filtered_predictions = filter_by_confidence(predictions, confidence_threshold)
 
-        # Display formatted NER results
-        formatted_results = format_ner_results(filtered_predictions, model_name)
-        st.markdown(formatted_results)
+        # Convert NER results to a table format
+        if filtered_predictions:
+            ner_table = format_ner_results_as_table(filtered_predictions)
+            st.table(ner_table)
+        else:
+            st.write(f"No entities detected above the confidence threshold for {model_name}.")
 
