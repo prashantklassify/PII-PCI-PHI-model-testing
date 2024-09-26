@@ -16,7 +16,7 @@ def clean_token(token):
     return token.replace("▁", "").replace("Ġ", "")
 
 # Function to format NER results into a DataFrame
-def format_ner_results_as_table(ner_results):
+def reformat(ner_results):
     entity_list = []
     
     for entity in ner_results:
@@ -65,6 +65,6 @@ if st.button("Run NER Models"):
         # Convert NER results to a table format
         if filtered_predictions:
             ner_table = format_ner_results_as_table(filtered_predictions)
-            st.table(ner_table)
+            st.table(reformat(ner_table))
         else:
             st.write(f"No entities detected above the confidence threshold for {model_name}.")
