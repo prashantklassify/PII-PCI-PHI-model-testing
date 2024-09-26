@@ -1,99 +1,82 @@
 import streamlit as st
 from transformers import pipeline
 
-# Load NER models from Hugging Face
-pii_model = pipeline("ner", model="iiiorg/piiranha-v1-detect-personal-information")
-pci_model = pipeline("ner", model="lakshyakh93/deberta_finetuned_pii")
-phi_model = pipeline("ner", model="obi/deid_roberta_i2b2")
-medical_ner_model = pipeline("ner", model="blaze999/Medical-NER")
-
-# Function to safely extract entity groups, handling missing keys
-def get_entity_group(token):
-    return token.get('entity_group', 'UNKNOWN')
-
-# Function to run all NER models on the input text
-def run_ner_models(text):
-    # Run PII, PHI, and PCI models
-    pii_results = pii_model(text)
-    phi_results = phi_model(text)
-    pci_results = pci_model(text)
-    
-    # Check if there are significant PHI tokens to run medical NER
-    significant_phi_tokens = [token for token in phi_results if get_entity_group(token) in ['PATIENT', 'LOC', 'ID']]
-    if len(significant_phi_tokens) > 5:
-        medical_results = medical_ner_model(text)
-    else:
-        medical_results = []
-
-    return pii_results, phi_results, pci_results, medical_results
-
-# Function to resolve token overlap by prioritizing PCI > PII > PHI
-def resolve_conflicts(pii, phi, pci, medical):
-    resolved_tokens = {}
-    
-    # Add PCI tokens first (highest priority)
-    for token in pci:
-        resolved_tokens[(token['start'], token['end'])] = token
-    
-    # Add PII tokens if they don't overlap with PCI tokens
-    for token in pii:
-        if (token['start'], token['end']) not in resolved_tokens:
-            resolved_tokens[(token['start'], token['end'])] = token
-    
-    # Add PHI tokens if they don't overlap with PCI or PII tokens
-    for token in phi:
-        if (token['start'], token['end']) not in resolved_tokens:
-            resolved_tokens[(token['start'], token['end'])] = token
-    
-    # Add Medical tokens if they don't overlap with other tokens
-    for token in medical:
-        if (token['start'], token['end']) not in resolved_tokens:
-            resolved_tokens[(token['start'], token['end'])] = token
-    
-    # Return the final resolved list of tokens
-    return list(resolved_tokens.values())
-
-# Function to mark tokens in the text dynamically with different colors for each category
-def mark_text(text, tokens, label_colors):
-    for token in tokens:
-        label = get_entity_group(token)
-        word = token['word']
-        color = label_colors.get(label, "#ffffff")  # Default color if no label found
-        text = text.replace(word, f'<mark style="background-color:{color};">{word} ({label})</mark>')
-    return text
-
-# Streamlit app UI
-st.title("Multi-NER Token Classifier")
-st.write("Enter text to classify tokens by categories like PII, PHI, PCI, and Medical.")
-
-# Text input area
-input_text = st.text_area("Enter text here:", height=200)
-
-# Label colors for each category
-label_colors = {
-    "ACCOUNTNUM": "#ffcccb",  # Red for PCI
-    "CREDITCARDNUMBER": "#ffcccb",  # Red for PCI
-    "CITY": "#ffff99",  # Yellow for PII
-    "PATIENT": "#b3e5fc",  # Light Blue for PHI
-    "EMAIL": "#ffff99",  # Yellow for PII
-    "USERNAME": "#d1c4e9",  # Light Purple for Medical NER
+# Define the models for NER
+models = {
+    "PII": "iiiorg/piiranha-v1-detect-personal-information",
+    "PHI": "obi/deid_roberta_i2b2",
+    "Medical NER": "blaze999/Medical-NER",
+    "PCI": "lakshyakh93/deberta_finetuned_pii"
 }
 
-# Run NER and display results
-if input_text:
-    st.subheader("NER Results")
+# Function to clean tokens
+def clean_token(token):
+    """Clean token by removing unwanted characters like '▁' and 'Ġ'."""
+    return token.replace("▁", "").replace("Ġ", "")
 
-    # Run all NER models on the input text
-    try:
-        pii_results, phi_results, pci_results, medical_results = run_ner_models(input_text)
+# Function to format NER results
+def format_ner_results(ner_results, model_name):
+    formatted_output = f"### {model_name} Results ###\n"
+    entity_buffer = ""
+    confidences = []
+    last_entity_type = None
 
-        # Resolve token conflicts
-        resolved_tokens = resolve_conflicts(pii_results, phi_results, pci_results, medical_results)
+    for entity in ner_results:
+        token = clean_token(entity['word'])  # Clean the token
+        confidence = entity['score'] * 100  # Convert to percentage
+        entity_type = entity['entity']
 
-        # Mark the text with detected entities
-        highlighted_text = mark_text(input_text, resolved_tokens, label_colors)
+        # If continuing the same entity type, concatenate tokens
+        if last_entity_type and last_entity_type.split("-")[-1] == entity_type.split("-")[-1]:
+            entity_buffer += token
+            confidences.append(confidence)
+        else:
+            # If a new entity starts, print the previous one
+            if entity_buffer:
+                avg_confidence = sum(confidences) / len(confidences)
+                formatted_output += f"- **{entity_buffer}**\n  - Confidence: {', '.join([f'{c:.2f}%' for c in confidences])}\n  - Detected as: {last_entity_type.split('-')[-1]}\n"
+            
+            # Start a new entity
+            entity_buffer = token
+            confidences = [confidence]
+        last_entity_type = entity_type
 
-        # Display the marked text in the Streamlit app
-        st.markdown(highlighted_text, unsafe_allow_html=True)
-    except KeyError as e:
-        st.error(f"An error occurred while processing: {e}")
+    # Output the last entity if available
+    if entity_buffer:
+        avg_confidence = sum(confidences) / len(confidences)
+        formatted_output += f"- **{entity_buffer}**\n  - Confidence: {', '.join([f'{c:.2f}%' for c in confidences])}\n  - Detected as: {last_entity_type.split('-')[-1]}\n"
+
+    return formatted_output
+
+# Function to filter predictions by confidence threshold
+def filter_by_confidence(predictions, threshold=0.5):
+    """Filter predictions to only include those with a confidence above the threshold."""
+    return [prediction for prediction in predictions if prediction['score'] > threshold]
+
+# Streamlit App Layout
+st.title("Named Entity Recognition (NER) Streamlit App")
+
+# User input for text
+text = st.text_area("Enter text for NER processing", "Patient Brijesh Kumar admitted in the room no 101 in glacier hospital has blood pressure over 140 and heart rate of 83bpm. The patient wants to avail no txn cost from insurance provider. Insurance number of FHZPB1650J and rest of the payment will be done by card number 4111 1111 1111 1111.")
+
+# Confidence threshold input
+confidence_threshold = st.slider("Confidence Threshold", min_value=0.0, max_value=1.0, value=0.5)
+
+# Button to process the text
+if st.button("Run NER Models"):
+    for model_name, model_path in models.items():
+        st.subheader(f"{model_name} Model Results")
+
+        # Load the model
+        pipe = pipeline("token-classification", model=model_path)
+        
+        # Get predictions
+        predictions = pipe(text)
+
+        # Filter predictions by confidence
+        filtered_predictions = filter_by_confidence(predictions, confidence_threshold)
+
+        # Display formatted NER results
+        formatted_results = format_ner_results(filtered_predictions, model_name)
+        st.markdown(formatted_results)
+
