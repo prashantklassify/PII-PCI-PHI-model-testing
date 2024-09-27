@@ -16,8 +16,11 @@ model_pci = pipeline("token-classification", model=models["PCI"])
 model_phi = pipeline("token-classification", model=models["PHI"])
 model_medical = pipeline("token-classification", model=models["Medical NER"])
 
-# Define accepted tokens
-accepted_pii_labels = {"ACCOUNTNUM", "BUILDINGNUM", "CITY", "CREDITCARDNUMBER", "DATEOFBIRTH", "DRIVERLICENSENUM", "EMAIL", "GIVENNAME", "IDCARDNUM", "PASSWORD", "SOCIALNUM", "STREET", "SURNAME", "TAXNUM", "TELEPHONENUM", "USERNAME", "ZIPCODE"} 
+# Define accepted labels
+accepted_pii_labels = {"ACCOUNTNUM", "BUILDINGNUM", "CITY", "CREDITCARDNUMBER", "DATEOFBIRTH", 
+                       "DRIVERLICENSENUM", "EMAIL", "GIVENNAME", "IDCARDNUM", "PASSWORD", 
+                       "SOCIALNUM", "STREET", "SURNAME", "TAXNUM", "TELEPHONENUM", "USERNAME", "ZIPCODE"}
+
 accepted_pci_labels = {
     "JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
     "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6",
@@ -26,12 +29,27 @@ accepted_pci_labels = {
     "LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV",
     "NEARBYGPSCOORDINATE", "SEXTYPE"
 }
+
 accepted_phi_labels = {"staff", "HOSP", "AGE"}
+
 accepted_medical_labels = {
     "BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT",
     "DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE",
     "MASS", "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"
 }
+
+# Entity label mapping for unifying different entity names
+entity_mapping = {
+    "CC_NUMBER": "CREDITCARDNUMBER",
+    "BIRTH_DATE": "DATEOFBIRTH",
+    "MEDICINE": "MEDICATION",
+    # Add more mappings if necessary
+}
+
+# Apply mapping to unify labels
+def apply_entity_mapping(entity):
+    entity_label = entity['entity'].split("-")[-1]  # Get entity type (ignore 'B-' or 'I-')
+    return entity_mapping.get(entity_label, entity_label)  # Map if present, else return original
 
 # Function to clean tokens
 def clean_token(token):
@@ -62,68 +80,51 @@ def filter_by_confidence(predictions, threshold=0.5):
     """Filter predictions to only include those with a confidence above the threshold."""
     return [prediction for prediction in predictions if prediction['score'] > threshold]
 
-# Function to check overlapping tokens
-def is_overlapping(token1, token2):
-    """Check if two tokens (text spans) are overlapping."""
-    start1, end1 = token1['start'], token1['end']
-    start2, end2 = token2['start'], token2['end']
-    return not (end1 < start2 or end2 < start1)
-
-# Function to resolve overlapping tokens by keeping the highest confidence one
-def resolve_overlapping_tokens(entities):
-    """Resolve overlapping tokens by keeping the one with the highest confidence."""
-    resolved_entities = []
-
-    for entity in entities:
-        # Check if there's an overlapping token already in the resolved list
-        overlapping_entity = None
-        for res in resolved_entities:
-            if is_overlapping(entity, res):
-                overlapping_entity = res
-                break
-
-        if overlapping_entity:
-            # Compare confidence scores and keep the one with the higher score
-            if entity['score'] > overlapping_entity['score']:
-                resolved_entities.remove(overlapping_entity)
-                resolved_entities.append(entity)
-        else:
-            # No overlap, just add the entity
-            resolved_entities.append(entity)
-
-    return resolved_entities
-
 # Custom NER pipeline function
 def custom_pipeline(text):
     # Run the text through the PII model
     pii_results = model_pii(text)
-    filtered_pii_results = [res for res in pii_results if res['entity'].split("-")[-1] in accepted_pii_labels]
+    filtered_pii_results = [
+        {**res, "entity": apply_entity_mapping(res)} 
+        for res in pii_results 
+        if apply_entity_mapping(res).split("-")[-1] in accepted_pii_labels
+    ]
     
-    # Run PCI model to capture additional financial or sensitive information
+    # Run the text through the PCI model if any PII labels are found
     pci_results = model_pci(text)
-    filtered_pci_results = [res for res in pci_results if res['entity'].split("-")[-1] in accepted_pci_labels]
+    filtered_pci_results = [
+        {**res, "entity": apply_entity_mapping(res)} 
+        for res in pci_results 
+        if apply_entity_mapping(res).split("-")[-1] in accepted_pci_labels
+    ]
     
-    # Run PHI model if relevant, even if PCI and PII were detected
+    # Run the text through the PHI model
     phi_results = model_phi(text)
-    filtered_phi_results = [res for res in phi_results if res['entity'].split("-")[-1] in accepted_phi_labels]
+    filtered_phi_results = [
+        {**res, "entity": apply_entity_mapping(res)} 
+        for res in phi_results 
+        if apply_entity_mapping(res).split("-")[-1] in accepted_phi_labels
+    ]
     
-    # Run Medical model to capture medical-related entities
+    # Run the text through the Medical model if needed
     medical_results = model_medical(text)
-    filtered_medical_results = [res for res in medical_results if res['entity'].split("-")[-1] in accepted_medical_labels]
+    filtered_medical_results = [
+        {**res, "entity": apply_entity_mapping(res)} 
+        for res in medical_results 
+        if apply_entity_mapping(res).split("-")[-1] in accepted_medical_labels
+    ]
     
-    # Combine results from all models
+    # Combine results: Prioritize medical labels over PHI and PCI over PII
     combined_results = filtered_pii_results + filtered_pci_results + filtered_phi_results + filtered_medical_results
     
-    # Resolve overlapping tokens
-    resolved_results = resolve_overlapping_tokens(combined_results)
-    
-    return resolved_results
+    return combined_results
 
 # Streamlit App Layout
 st.title("Named Entity Recognition (NER) Streamlit App")
 
 # User input for text
-text = st.text_area("Enter text for NER processing", "Patient Brijesh Kumar admitted in the room no 101 in glacier hospital has blood pressure over 140 and heart rate of 83bpm. The patient wants to avail no txn cost from insurance provider. Insurance number of FHZPB1650J and rest of the payment will be done by card number 4111 1111 1111 1111.")
+text = st.text_area("Enter text for NER processing", 
+                    "Patient Brijesh Kumar admitted in the room no 101 in glacier hospital has blood pressure over 140 and heart rate of 83bpm. The patient wants to avail no txn cost from insurance provider. Insurance number of FHZPB1650J and rest of the payment will be done by card number 4111 1111 1111 1111.")
 
 # Confidence threshold input
 confidence_threshold = st.slider("Confidence Threshold", min_value=0.0, max_value=1.0, value=0.5)
