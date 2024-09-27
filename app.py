@@ -17,9 +17,7 @@ model_phi = pipeline("token-classification", model=models["PHI"])
 model_medical = pipeline("token-classification", model=models["Medical NER"])
 
 # Define accepted tokens
-accepted_pii_labels = {"ACCOUNTNUM", "BUILDINGNUM", "CITY", "CREDITCARDNUMBER", "DATEOFBIRTH", "DRIVERLICENSENUM",
-                       "EMAIL", "GIVENNAME", "IDCARDNUM", "PASSWORD", "SOCIALNUM", "STREET", "SURNAME",
-                       "TAXNUM", "TELEPHONENUM", "USERNAME", "ZIPCODE"}
+accepted_pii_labels = {"ACCOUNTNUM", "BUILDINGNUM", "CITY", "CREDITCARDNUMBER", "DATEOFBIRTH", "DRIVERLICENSENUM", "EMAIL", "GIVENNAME", "IDCARDNUM", "PASSWORD", "SOCIALNUM", "STREET", "SURNAME", "TAXNUM", "TELEPHONENUM", "USERNAME", "ZIPCODE"} 
 accepted_pci_labels = {
     "JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
     "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6",
@@ -69,31 +67,29 @@ def custom_pipeline(text):
     # Run the text through the PII model
     pii_results = model_pii(text)
     filtered_pii_results = [res for res in pii_results if res['entity'].split("-")[-1] in accepted_pii_labels]
-
-    # If PII labels are detected, process with the PCI model
-    if filtered_pii_results:
-        pci_results = model_pci(text)
-        filtered_pci_results = [res for res in pci_results if res['entity'].split("-")[-1] in accepted_pci_labels]
-        return filtered_pci_results
-
-    # If no PII labels found, process with the PHI model
+    
+    # Run PCI model to capture additional financial or sensitive information
+    pci_results = model_pci(text)
+    filtered_pci_results = [res for res in pci_results if res['entity'].split("-")[-1] in accepted_pci_labels]
+    
+    # Run PHI model if relevant, even if PCI and PII were detected
     phi_results = model_phi(text)
     filtered_phi_results = [res for res in phi_results if res['entity'].split("-")[-1] in accepted_phi_labels]
-
-    # If PHI results have unique tokens, proceed to the Medical model
-    if filtered_phi_results:
-        medical_results = model_medical(text)
-        filtered_medical_results = [res for res in medical_results if res['entity'].split("-")[-1] in accepted_medical_labels]
-        return filtered_medical_results
     
-    return filtered_phi_results  # Return PHI results if no other conditions are met
+    # Run Medical model to capture medical-related entities
+    medical_results = model_medical(text)
+    filtered_medical_results = [res for res in medical_results if res['entity'].split("-")[-1] in accepted_medical_labels]
+    
+    # Combine results from all models
+    combined_results = filtered_pii_results + filtered_pci_results + filtered_phi_results + filtered_medical_results
+    
+    return combined_results
 
 # Streamlit App Layout
 st.title("Named Entity Recognition (NER) Streamlit App")
 
 # User input for text
-text = st.text_area("Enter text for NER processing", 
-                    "Patient Brijesh Kumar admitted in the room no 101 in glacier hospital has blood pressure over 140 and heart rate of 83bpm. The patient wants to avail no txn cost from insurance provider. Insurance number of FHZPB1650J and rest of the payment will be done by card number 4111 1111 1111 1111.")
+text = st.text_area("Enter text for NER processing", "Patient Brijesh Kumar admitted in the room no 101 in glacier hospital has blood pressure over 140 and heart rate of 83bpm. The patient wants to avail no txn cost from insurance provider. Insurance number of FHZPB1650J and rest of the payment will be done by card number 4111 1111 1111 1111.")
 
 # Confidence threshold input
 confidence_threshold = st.slider("Confidence Threshold", min_value=0.0, max_value=1.0, value=0.5)
