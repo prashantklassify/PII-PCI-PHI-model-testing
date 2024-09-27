@@ -96,8 +96,17 @@ def display_results(results):
 st.title("Enhanced Named Entity Recognition (NER) Streamlit App")
 
 # User input for text
-text = st.text_area("Enter text for NER processing", "Patient Brijesh Kumar admitted in the room no 101 in glacier hospital has blood pressure over 140 and heart rate of 83bpm. The patient wants to avail no txn cost from insurance provider. Insurance number of FHZPB1650J and rest of the payment will be done by card number 4111 1111 1111 1111.")
+text = st.text_area("Enter text for NER processing", "In a recent clinical study, the patient, a 70-year-old male with a family history of diabetes and hypertension, reported symptoms of chest pain. The doctor prescribed a dosage of 50mg Medication daily to manage his disease disorder. Laboratory tests revealed a lab value of 5.5 mmol/L for glucose, indicating potential clinical events.
 
+During the examination, the staff at General Hospital noted that the patient had a mass in his abdomen. His treatment outcome was positive after undergoing a therapeutic procedure involving minimally invasive surgery. The patient’s sign symptom was primarily fatigue, and he also complained about a persistent cough.
+
+On his medical record, the patient's age, sex type, and occupation were clearly documented. His job title is retired engineer, and his job area was previously in automotive design. For billing purposes, his account name is JohnDoe123, and his credit card number is 1234-5678-9012-3456 with a CVV of 123.
+
+For identification, he provided his driver's license number as D1234567, and his social security number is recorded as 123-45-6789. His email address is john.doe@example.com, and he resides at 1234 Elm Street, Springfield, IL, with a zip code of 62704.
+
+Additionally, the study also recorded his bank account number, which is 1234567890, and his IBAN is US12345678901234567890. The financial transactions included bitcoin address and ethereum address, which are 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa and 0x32Be343B94f860124d1DCC2D4a8e8dD6A22E6A5C respectively.
+
+For medical billing, the amount charged was $500, and the currency used was USD. The hospital's BIC was HOSPUS33, and the relevant currenciesymbol was $. Lastly, all sensitive information such as passwords were encrypted for security, and the patient's phone IMEI was recorded for contact purposes.")
 # Button to process the text
 if st.button("Run NER Models"):
     st.subheader("Custom NER Pipeline Results")
