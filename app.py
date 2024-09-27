@@ -85,7 +85,7 @@ def display_results(results):
 st.title("Enhanced Named Entity Recognition (NER) Streamlit App")
 
 # User input for text
-text = st.text_area("Enter text for NER processing", "Patient John Doe admitted to the hospital has a heart rate of 80bpm and no known allergies. He is taking medication Metformin.")
+text = st.text_area("Enter text for NER processing", "Patient John Doe admitted to the hospital has a heart rate of 80bpm and no known allergies. He is taking medication Metformin.\n\nPatient Brijesh Kumar admitted in the room no 101 in glacier hospital has blood pressure over 140 and heart rate of 83bpm. The patient wants to avail no txn cost from insurance provider. Insurance number of FHZPB1650J and rest of the payment will be done by card number 4111 1111 1111 1111.")
 
 # Button to process the text
 if st.button("Run NER Models"):
