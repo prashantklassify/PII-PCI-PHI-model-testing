@@ -80,6 +80,37 @@ def filter_by_confidence(predictions, threshold=0.5):
     """Filter predictions to only include those with a confidence above the threshold."""
     return [prediction for prediction in predictions if prediction['score'] > threshold]
 
+# Function to merge and prioritize entities based on model hierarchy
+def merge_entities_with_priority(pii_results, phi_results, pci_results):
+    """
+    Merge entities from different models (PII, PHI, PCI) based on priority:
+    - PII is the highest priority.
+    - PHI is the second highest priority.
+    - PCI is the lowest priority.
+    """
+    merged_entities = {}
+
+    # Process PII entities first (highest priority)
+    for entity in pii_results:
+        token = clean_token(entity['word'])
+        if token not in merged_entities:
+            merged_entities[token] = entity
+
+    # Process PHI entities (second priority)
+    for entity in phi_results:
+        token = clean_token(entity['word'])
+        if token not in merged_entities:  # Add only if not already in PII
+            merged_entities[token] = entity
+
+    # Process PCI entities (lowest priority)
+    for entity in pci_results:
+        token = clean_token(entity['word'])
+        if token not in merged_entities:  # Add only if not already in PII or PHI
+            merged_entities[token] = entity
+
+    # Convert the merged entities back to a list
+    return list(merged_entities.values())
+
 # Custom NER pipeline function
 def custom_pipeline(text):
     # Run the text through the PII model
@@ -90,14 +121,6 @@ def custom_pipeline(text):
         if apply_entity_mapping(res).split("-")[-1] in accepted_pii_labels
     ]
     
-    # Run the text through the PCI model if any PII labels are found
-    pci_results = model_pci(text)
-    filtered_pci_results = [
-        {**res, "entity": apply_entity_mapping(res)} 
-        for res in pci_results 
-        if apply_entity_mapping(res).split("-")[-1] in accepted_pci_labels
-    ]
-    
     # Run the text through the PHI model
     phi_results = model_phi(text)
     filtered_phi_results = [
@@ -106,18 +129,18 @@ def custom_pipeline(text):
         if apply_entity_mapping(res).split("-")[-1] in accepted_phi_labels
     ]
     
-    # Run the text through the Medical model if needed
-    medical_results = model_medical(text)
-    filtered_medical_results = [
+    # Run the text through the PCI model if any PII labels are found
+    pci_results = model_pci(text)
+    filtered_pci_results = [
         {**res, "entity": apply_entity_mapping(res)} 
-        for res in medical_results 
-        if apply_entity_mapping(res).split("-")[-1] in accepted_medical_labels
+        for res in pci_results 
+        if apply_entity_mapping(res).split("-")[-1] in accepted_pci_labels
     ]
     
-    # Combine results: Prioritize medical labels over PHI and PCI over PII
-    combined_results = filtered_pii_results + filtered_pci_results + filtered_phi_results + filtered_medical_results
+    # Merge results based on priority (PII > PHI > PCI)
+    merged_results = merge_entities_with_priority(filtered_pii_results, filtered_phi_results, filtered_pci_results)
     
-    return combined_results
+    return merged_results
 
 # Streamlit App Layout
 st.title("Named Entity Recognition (NER) Streamlit App")
