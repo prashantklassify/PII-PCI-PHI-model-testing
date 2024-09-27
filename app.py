@@ -129,7 +129,7 @@ def custom_pipeline(text):
         if apply_entity_mapping(res).split("-")[-1] in accepted_phi_labels
     ]
     
-    # Run the text through the PCI model if any PII labels are found
+    # Run the text through the PCI model
     pci_results = model_pci(text)
     filtered_pci_results = [
         {**res, "entity": apply_entity_mapping(res)} 
@@ -139,8 +139,19 @@ def custom_pipeline(text):
     
     # Merge results based on priority (PII > PHI > PCI)
     merged_results = merge_entities_with_priority(filtered_pii_results, filtered_phi_results, filtered_pci_results)
+
+    # Run Medical NER model independently on the original text
+    medical_results = model_medical(text)
+    filtered_medical_results = [
+        {**res, "entity": apply_entity_mapping(res)} 
+        for res in medical_results 
+        if apply_entity_mapping(res).split("-")[-1] in accepted_medical_labels
+    ]
+
+    # Combine merged results with filtered Medical NER results
+    final_results = merged_results + filtered_medical_results
     
-    return merged_results
+    return final_results
 
 # Streamlit App Layout
 st.title("Named Entity Recognition (NER) Streamlit App")
