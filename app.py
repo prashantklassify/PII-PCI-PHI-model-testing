@@ -62,6 +62,37 @@ def filter_by_confidence(predictions, threshold=0.5):
     """Filter predictions to only include those with a confidence above the threshold."""
     return [prediction for prediction in predictions if prediction['score'] > threshold]
 
+# Function to check overlapping tokens
+def is_overlapping(token1, token2):
+    """Check if two tokens (text spans) are overlapping."""
+    start1, end1 = token1['start'], token1['end']
+    start2, end2 = token2['start'], token2['end']
+    return not (end1 < start2 or end2 < start1)
+
+# Function to resolve overlapping tokens by keeping the highest confidence one
+def resolve_overlapping_tokens(entities):
+    """Resolve overlapping tokens by keeping the one with the highest confidence."""
+    resolved_entities = []
+
+    for entity in entities:
+        # Check if there's an overlapping token already in the resolved list
+        overlapping_entity = None
+        for res in resolved_entities:
+            if is_overlapping(entity, res):
+                overlapping_entity = res
+                break
+
+        if overlapping_entity:
+            # Compare confidence scores and keep the one with the higher score
+            if entity['score'] > overlapping_entity['score']:
+                resolved_entities.remove(overlapping_entity)
+                resolved_entities.append(entity)
+        else:
+            # No overlap, just add the entity
+            resolved_entities.append(entity)
+
+    return resolved_entities
+
 # Custom NER pipeline function
 def custom_pipeline(text):
     # Run the text through the PII model
@@ -83,7 +114,10 @@ def custom_pipeline(text):
     # Combine results from all models
     combined_results = filtered_pii_results + filtered_pci_results + filtered_phi_results + filtered_medical_results
     
-    return combined_results
+    # Resolve overlapping tokens
+    resolved_results = resolve_overlapping_tokens(combined_results)
+    
+    return resolved_results
 
 # Streamlit App Layout
 st.title("Named Entity Recognition (NER) Streamlit App")
