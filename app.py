@@ -157,16 +157,19 @@ st.title("Document Classification and NER")
 # Input text
 input_text = st.text_area("Enter text for classification and NER:")
 
-# Perform classification and NER when text is provided
-if input_text:
-    # Perform document classification
-    main_category, sub_category, specific_doc_type = classify_document(input_text)
-    
-    st.write(f"Main Category: {main_category}")
-    st.write(f"Sub Category: {sub_category}")
-    st.write(f"Specific Document Type: {specific_doc_type}")
-    
-    # Perform NER
-    ner_results = custom_pipeline(input_text)
-    st.write("Named Entities:")
-    st.write(ner_results)
+# Add a button to trigger classification and NER
+if st.button("Classify and Extract Entities"):
+    if input_text:
+        # Perform document classification
+        main_category, sub_category, specific_doc_type = classify_document(input_text)
+        
+        st.write(f"Main Category: {main_category}")
+        st.write(f"Sub Category: {sub_category}")
+        st.write(f"Specific Document Type: {specific_doc_type}")
+        
+        # Perform NER
+        ner_results = custom_pipeline(input_text)
+        st.write("Named Entities:")
+        st.write(ner_results)
+    else:
+        st.write("Please enter some text for classification and NER.")
