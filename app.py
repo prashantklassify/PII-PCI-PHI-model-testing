@@ -158,14 +158,25 @@ def custom_pipeline(text):
 
     return combined_results
 def classify_document(text):
-    # Classify main category
-    main_class = classifier(text, candidate_labels=possible_classes)['labels'][0]
+    # Classify multiple main categories
+    main_classifications = classifier(text, candidate_labels=main_categories, multi_label=True)
 
-    # Sub-classify within the main category
-    sub_classes = [sub for sub in possible_classes if sub.startswith(main_class.split()[0])]  # Example sub-class logic
-    sub_class = classifier(text, candidate_labels=sub_classes)['labels'][0] if sub_classes else "No Subclass"
+    # Get the top main classes based on scores
+    main_classes = [label for label, score in zip(main_classifications['labels'], main_classifications['scores']) if score >= 0.5]
 
-    return main_class, sub_class
+    sub_classifications = []
+    
+    # Classify sub-categories for each identified main category
+    for main_class in main_classes:
+        sub_classes = [sub for sub in possible_classes if sub.startswith(main_class.split()[0])]
+        if sub_classes:
+            sub_class = classifier(text, candidate_labels=sub_classes, multi_label=True)
+            sub_classifications.append({
+                "main_class": main_class,
+                "sub_classes": [label for label, score in zip(sub_class['labels'], sub_class['scores']) if score >= 0.5]
+            })
+
+    return main_classes, sub_classifications
 # Function to display results in a table format
 def display_results(results):
     table_data = [{
@@ -176,7 +187,7 @@ def display_results(results):
     return pd.DataFrame(table_data)
 
 # Streamlit app layout
-st.title("Enhanced Named Entity Recognition (NER) Streamlit App")
+st.title("Multi-Label Named Entity Recognition (NER) Streamlit App")
 
 # User input for text
 text = st.text_area("Enter text for NER processing", "")
@@ -193,6 +204,13 @@ if st.button("Run NER Models"):
         st.table(results_table)
     else:
         st.write("No entities detected.")
-    main_class, sub_class = classify_document(text)
-    st.write(f"Main Category: {main_class}")
-    st.write(f"Sub Category: {sub_class}")
+
+    # Classify main and sub-categories
+    main_classes, sub_classifications = classify_document(text)
+    
+    # Display the main categories
+    st.write(f"Main Categories: {', '.join(main_classes)}")
+
+    # Display sub-categories for each main category
+    for sub_class in sub_classifications:
+        st.write(f"Sub-categories for {sub_class['main_class']}: {', '.join(sub_class['sub_classes'])}")
