@@ -1,7 +1,6 @@
 streamlit
 transformers
 torch
-os
 textract  
 pytesseract  
 PIL
