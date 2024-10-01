@@ -15,6 +15,7 @@ model_pii = pipeline("token-classification", model=models["PII"])
 model_pci = pipeline("token-classification", model=models["PCI"])
 model_phi = pipeline("token-classification", model=models["PHI"])
 model_medical = pipeline("token-classification", model=models["Medical NER"])
+classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
 possible_classes = [
     # Business
     'Business Proposal', 'Invoice', 'Receipt', 'Contract', 'Purchase Order',
