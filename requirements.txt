@@ -6,3 +6,5 @@ pytesseract
 PIL
 sklearn
 numpy
+zipfile
+tempfile
