@@ -9,7 +9,21 @@ models = {
     "PHI": "obi/deid_roberta_i2b2",
     "Medical NER": "blaze999/Medical-NER"
 }
-
+accepted_pii_labels = set()  # Accept all categories under PII
+accepted_pci_labels = {
+    "JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
+    "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6",
+    "CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD",
+    "PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE",
+    "LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV",
+    "NEARBYGPSCOORDINATE", "SEXTYPE"
+}
+accepted_phi_labels = {"staff", "HOSP", "AGE"}
+accepted_medical_labels = {
+    "BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT",
+    "DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS",
+    "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"
+}
 model_pii = pipeline("token-classification", model=models["PII"])
 model_pci = pipeline("token-classification", model=models["PCI"])
 model_phi = pipeline("token-classification", model=models["PHI"])
