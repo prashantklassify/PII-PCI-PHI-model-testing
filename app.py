@@ -9,7 +9,7 @@ models = {
     "PHI": "obi/deid_roberta_i2b2",
     "Medical NER": "blaze999/Medical-NER"
 }
-accepted_pii_labels = set()  # Accept all categories under PII
+accepted_pii_labels = {'ACCOUNTNUM','BUILDINGNUM','CITY','CREDITCARDNUMBER','DATEOFBIRTH','DRIVERLICENSENUM','EMAIL','GIVENNAME','IDCARDNUM','PASSWORD','SOCIALNUM','STREET','SURNAME','TAXNUM','TELEPHONENUM','USERNAME'}
 accepted_pci_labels = {
     "JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
     "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6",
