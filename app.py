@@ -90,7 +90,10 @@ possible_classes = [
 
     # (More unique categories can be added to meet the desired count)
 ] * 45  # This will replicate the list above until we reach around 1000
-
+main_categories = [
+    'Business', 'Education', 'Health', 'Legal', 'Technical', 'Personal',
+    'Government', 'Marketing', 'Miscellaneous'
+]
 # Define the accepted labels for each category
 accepted_pii_labels = set()  # Accept all categories under PII
 accepted_pci_labels = {"JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
