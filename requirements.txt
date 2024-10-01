@@ -7,4 +7,3 @@ Pillow
 scikit-learn
 numpy
 pandas
-re
