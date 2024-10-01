@@ -17,67 +17,73 @@ model_phi = pipeline("token-classification", model=models["PHI"])
 model_medical = pipeline("token-classification", model=models["Medical NER"])
 classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
 
-# Define the main categories and their sub-categories
-category_hierarchy = {
-    'Legal': [
-        'Contracts', 'Legal Briefs', 'Memorandums', 'Compliance Documents', 
-        'Court Filings', 'Legal Policies'
-    ],
-    'HR': [
-        'Resumes', 'Employee Handbooks', 'Performance Reviews', 
-        'Job Descriptions', 'Onboarding Documents', 'Termination Letters'
-    ],
-    'Finance': [
-        'Financial Statements', 'Budgets', 'Invoices', 'Tax Returns', 
-        'Expense Reports', 'Investment Proposals'
-    ],
-    'Insurance': [
-        'Policy Documents', 'Claim Forms', 'Underwriting Guidelines', 
-        'Coverage Summaries', 'Renewal Notices', 'Incident Reports'
-    ],
-    'Operations': [
-        'Standard Operating Procedures (SOPs)', 'Inventory Reports', 
-        'Project Plans', 'Quality Assurance Documents', 
-        'Logistics Plans', 'Operational Audits'
-    ],
-    'Personal': [
-        'Personal Statements', 'Life Plans', 'Health Records', 
-        'Financial Plans', 'Journals', 'Travel Itineraries'
-    ],
-    'Sales': [
-        'Sales Proposals', 'Sales Reports', 'Customer Contracts', 
-        'Lead Lists', 'Sales Scripts', 'Market Analysis Reports'
-    ],
-    'Product': [
-        'Product Specifications', 'User Manuals', 'Product Roadmaps', 
-        'Market Research Reports', 'Design Documents', 'Release Notes'
-    ]
+# Define the hierarchical categories
+hierarchy = {
+    "Legal": {
+        "Contracts": ["Sales Contracts", "Employment Contracts"],
+        "Legal Briefs": ["Case Briefs", "Motion Briefs"],
+        "Memorandums": ["Legal Memos", "Opinion Memos"],
+        "Compliance Documents": ["Compliance Checklists", "Audit Reports"],
+        "Court Filings": ["Pleadings", "Court Orders"],
+        "Legal Policies": ["Workplace Policies", "Privacy Policies"]
+    },
+    "HR": {
+        "Resumes": ["CVs", "Cover Letters"],
+        "Employee Handbooks": ["Company Policies", "Code of Conduct"],
+        "Performance Reviews": ["Annual Review Forms", "Feedback Forms"],
+        "Job Descriptions": ["Position Specifications", "Role Summaries"],
+        "Onboarding Documents": ["Orientation Guides", "Training Materials"],
+        "Termination Letters": ["Resignation Letters", "Dismissal Notices"]
+    },
+    "Finance": {
+        "Financial Statements": ["Balance Sheets", "Income Statements"],
+        "Budgets": ["Annual Budgets", "Project Budgets"],
+        "Invoices": ["Service Invoices", "Purchase Invoices"],
+        "Tax Returns": ["Personal Returns", "Corporate Returns"],
+        "Expense Reports": ["Travel Expenses", "Reimbursement Forms"],
+        "Investment Proposals": ["Business Investment Plans", "Risk Assessments"]
+    },
+    "Insurance": {
+        "Policy Documents": ["Insurance Policies", "Endorsements"],
+        "Claim Forms": ["Health Claim Forms", "Auto Insurance Claims"],
+        "Underwriting Guidelines": ["Risk Assessment Guidelines", "Criteria Lists"],
+        "Coverage Summaries": ["Benefits Overview", "Coverage Explanations"],
+        "Renewal Notices": ["Policy Renewal Forms", "Reminder Letters"],
+        "Incident Reports": ["Claims Incident Reports", "Loss Assessments"]
+    },
+    "Operations": {
+        "Standard Operating Procedures": ["Process Manuals", "Workflow Guides"],
+        "Inventory Reports": ["Stock Levels", "Inventory Audits"],
+        "Project Plans": ["Project Charters", "Gantt Charts"],
+        "Quality Assurance Documents": ["Inspection Reports", "Testing Protocols"],
+        "Logistics Plans": ["Delivery Schedules", "Shipping Documents"],
+        "Operational Audits": ["Performance Assessments", "Compliance Reports"]
+    },
+    "Personal": {
+        "Personal Statements": ["Statements of Purpose", "Biographies"],
+        "Life Plans": ["Personal Goals", "Vision Boards"],
+        "Health Records": ["Medical Histories", "Fitness Plans"],
+        "Financial Plans": ["Budgeting Worksheets", "Savings Plans"],
+        "Journals": ["Daily Journals", "Reflection Notes"],
+        "Travel Itineraries": ["Trip Plans", "Travel Logs"]
+    },
+    "Sales": {
+        "Sales Proposals": ["Business Proposals", "Bids"],
+        "Sales Reports": ["Weekly Sales Reports", "Performance Dashboards"],
+        "Customer Contracts": ["Service Agreements", "Client Contracts"],
+        "Lead Lists": ["Prospect Lists", "Contact Databases"],
+        "Sales Scripts": ["Cold Call Scripts", "Follow-up Templates"],
+        "Market Analysis Reports": ["Competitive Analysis", "Market Research"]
+    },
+    "Product": {
+        "Product Specifications": ["Product Requirements Documents", "Feature Lists"],
+        "User Manuals": ["Instruction Guides", "Installation Manuals"],
+        "Product Roadmaps": ["Development Plans", "Timeline Documents"],
+        "Market Research Reports": ["Consumer Research", "Trend Analysis"],
+        "Design Documents": ["Wireframes", "Mockups"],
+        "Release Notes": ["Version Updates", "Feature Changes"]
+    }
 }
-
-# Flatten the category hierarchy for classification
-possible_classes = []
-for main_category, sub_categories in category_hierarchy.items():
-    possible_classes.append(main_category)  # Add main category
-    for sub_category in sub_categories:
-        possible_classes.append(f"{main_category}: {sub_category}")  # Add sub-category
-
-# Define accepted labels for NER
-accepted_pii_labels = set()  # Accept all categories under PII
-accepted_pci_labels = {"JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", 
-                       "ETHEREUMADDRESS", "ACCOUNTNAME", "ACCOUNTNUMBER", 
-                       "IBAN", "BIC", "IPV4", "IPV6", "CREDITCARDNUMBER", 
-                       "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD", 
-                       "PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", 
-                       "CURRENCYCODE", "LITECOINADDRESS", "MAC", 
-                       "CREDITCARDISSUER", "CREDITCARDCVV", 
-                       "NEARBYGPSCOORDINATE", "SEXTYPE"}
-
-accepted_phi_labels = {"staff", "HOSP", "AGE"}
-accepted_medical_labels = {"BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", 
-                           "CLINICAL_EVENT", "DISEASE_DISORDER", "DOSAGE", 
-                           "FAMILY_HISTORY", "LAB_VALUE", "MASS", 
-                           "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", 
-                           "THERAPUTIC_PROCEDURE"}
 
 # Define sliders for confidence thresholds
 threshold_pii = st.slider("Confidence Threshold for PII Model", 0.0, 1.0, 0.75, 0.05)
@@ -112,17 +118,14 @@ def custom_pipeline(text):
 
     # Run the text through the PHI model
     phi_results = model_phi(text)
-    phi_results = [entity for entity in phi_results if entity['entity'].split("-")[-1] in accepted_phi_labels]
     phi_results = clean_and_merge_tokens(phi_results, threshold_phi)
 
     # Run the text through the PCI model
     pci_results = model_pci(text)
-    pci_results = [entity for entity in pci_results if entity['entity'].split("-")[-1] in accepted_pci_labels]
     pci_results = clean_and_merge_tokens(pci_results, threshold_pci)
 
-    # Run Medical NER model independently on the original text
+    # Run the text through the Medical NER model
     medical_results = model_medical(text)
-    medical_results = [entity for entity in medical_results if entity['entity'].split("-")[-1] in accepted_medical_labels]
     medical_results = clean_and_merge_tokens(medical_results, threshold_medical)
 
     # Combine all results
@@ -130,21 +133,40 @@ def custom_pipeline(text):
 
     return combined_results
 
+# Document classification based on hierarchy
 def classify_document(text):
-    # Classify the main categories
-    main_classifications = classifier(text, candidate_labels=list(category_hierarchy.keys()), multi_label=True)
-
-    # Get the top main classes based on scores
-    main_classes = [label for label, score in zip(main_classifications['labels'], main_classifications['scores']) if score >= 0.5]
-
-    sub_classifications = []
+    # First classify the main categories
+    main_classifications = classifier(text, candidate_labels=list(hierarchy.keys()), multi_label=False)
+    main_category = main_classifications['labels'][0]
     
-    # Classify sub-categories for each identified main category
-    for main_class in main_classes:
-        sub_classifications.extend(classifier(text, candidate_labels=category_hierarchy[main_class], multi_label=True))
+    # Now classify the sub-categories within the identified main category
+    sub_category_classes = list(hierarchy[main_category].keys())
+    sub_classifications = classifier(text, candidate_labels=sub_category_classes, multi_label=False)
+    sub_category = sub_classifications['labels'][0]
+    
+    # Classify at the third level (specific documents)
+    third_level_classes = hierarchy[main_category][sub_category]
+    third_classifications = classifier(text, candidate_labels=third_level_classes, multi_label=False)
+    specific_doc_type = third_classifications['labels'][0]
+    
+    return main_category, sub_category, specific_doc_type
 
-    # Combine results
-    return {
-        'main_classes': main_classes,
-        'sub_classes': [label for label, score in zip(sub_classifications['labels'], sub_classifications['scores']) if score >= 0.5]
-    }
+# Streamlit App layout
+st.title("Document Classification and NER")
+
+# Input text
+input_text = st.text_area("Enter text for classification and NER:")
+
+# Perform classification and NER when text is provided
+if input_text:
+    # Perform document classification
+    main_category, sub_category, specific_doc_type = classify_document(input_text)
+    
+    st.write(f"Main Category: {main_category}")
+    st.write(f"Sub Category: {sub_category}")
+    st.write(f"Specific Document Type: {specific_doc_type}")
+    
+    # Perform NER
+    ner_results = custom_pipeline(input_text)
+    st.write("Named Entities:")
+    st.write(ner_results)
