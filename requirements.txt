@@ -1,9 +1,6 @@
 streamlit
 transformers
 torch
-textract
-pytesseract
-Pillow
 scikit-learn
 numpy
 pandas
