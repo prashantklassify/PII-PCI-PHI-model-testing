@@ -1,3 +1,9 @@
 streamlit
 transformers
 torch
+os
+textract  
+pytesseract  
+PIL
+sklearn
+numpy
