@@ -40,7 +40,7 @@ hierarchy = {
         "Court Filings": ["Pleadings", "Court Orders"],
         "Legal Policies": ["Workplace Policies", "Privacy Policies"]
     },
-    "HR": {
+    "Human Resources Department": {
         "Resumes": ["CVs", "Cover Letters"],
         "Employee Handbooks": ["Company Policies", "Code of Conduct"],
         "Performance Reviews": ["Annual Review Forms", "Feedback Forms"],
