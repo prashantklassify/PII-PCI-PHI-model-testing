@@ -1,10 +1,8 @@
 streamlit
 transformers
 torch
-textract  
-pytesseract  
-PIL
-sklearn
+textract
+pytesseract
+Pillow
+scikit-learn
 numpy
-zipfile
-tempfile
