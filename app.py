@@ -16,10 +16,6 @@ model_pci = pipeline("token-classification", model=models["PCI"])
 model_phi = pipeline("token-classification", model=models["PHI"])
 model_medical = pipeline("token-classification", model=models["Medical NER"])
 classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
-main_categories = [
-    'Business', 'Education', 'Health', 'Legal', 'Technical', 'Personal',
-    'Government', 'Marketing', 'Miscellaneous'
-]
 possible_classes = [
     # Business
     'Business Proposal', 'Invoice', 'Receipt', 'Contract', 'Purchase Order',
@@ -162,17 +158,12 @@ def custom_pipeline(text):
 
     return combined_results
 def classify_document(text):
-    # Classify main category first
-    main_class = classifier(text, candidate_labels=main_categories)['labels'][0]
+    # Classify main category
+    main_class = classifier(text, candidate_labels=possible_classes)['labels'][0]
 
-    # Filter sub-categories that belong to the identified main category
-    sub_classes = [sub for sub in possible_classes if sub.startswith(main_class.split()[0])]
-    
-    # Classify sub-category within the main category
-    if sub_classes:
-        sub_class = classifier(text, candidate_labels=sub_classes)['labels'][0]
-    else:
-        sub_class = "No Subclass"
+    # Sub-classify within the main category
+    sub_classes = [sub for sub in possible_classes if sub.startswith(main_class.split()[0])]  # Example sub-class logic
+    sub_class = classifier(text, candidate_labels=sub_classes)['labels'][0] if sub_classes else "No Subclass"
 
     return main_class, sub_class
 # Function to display results in a table format
