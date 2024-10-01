@@ -116,27 +116,37 @@ def clean_and_merge_tokens(entities, threshold):
     return cleaned_entities
 
 # Custom NER pipeline function
+# Custom NER pipeline function
 def custom_pipeline(text):
     # Run the text through the PII model
     pii_results = model_pii(text)
     pii_results = clean_and_merge_tokens(pii_results, threshold_pii)
+    # Filter PII results
+    pii_results = [entity for entity in pii_results if entity['entity'] in accepted_pii_labels]
 
     # Run the text through the PHI model
     phi_results = model_phi(text)
     phi_results = clean_and_merge_tokens(phi_results, threshold_phi)
+    # Filter PHI results
+    phi_results = [entity for entity in phi_results if entity['entity'].split("-")[-1] in accepted_phi_labels]
 
     # Run the text through the PCI model
     pci_results = model_pci(text)
     pci_results = clean_and_merge_tokens(pci_results, threshold_pci)
+    # Filter PCI results
+    pci_results = [entity for entity in pci_results if entity['entity'].split("-")[-1] in accepted_pci_labels]
 
     # Run the text through the Medical NER model
     medical_results = model_medical(text)
     medical_results = clean_and_merge_tokens(medical_results, threshold_medical)
+    # Filter Medical NER results
+    medical_results = [entity for entity in medical_results if entity['entity'].split("-")[-1] in accepted_medical_labels]
 
     # Combine all results
     combined_results = pii_results + phi_results + pci_results + medical_results
 
     return combined_results
+
 
 # Document classification based on hierarchy
 def classify_document(text):
