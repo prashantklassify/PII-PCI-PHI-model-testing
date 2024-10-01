@@ -59,14 +59,6 @@ hierarchy = {
         "Logistics Plans": ["Delivery Schedules", "Shipping Documents"],
         "Operational Audits": ["Performance Assessments", "Compliance Reports"]
     },
-    "Personal": {
-        "Personal Statements": ["Statements of Purpose", "Biographies"],
-        "Life Plans": ["Personal Goals", "Vision Boards"],
-        "Health Records": ["Medical Histories", "Fitness Plans"],
-        "Financial Plans": ["Budgeting Worksheets", "Savings Plans"],
-        "Journals": ["Daily Journals", "Reflection Notes"],
-        "Travel Itineraries": ["Trip Plans", "Travel Logs"]
-    },
     "Sales": {
         "Sales Proposals": ["Business Proposals", "Bids"],
         "Sales Reports": ["Weekly Sales Reports", "Performance Dashboards"],
