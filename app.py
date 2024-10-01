@@ -79,14 +79,6 @@ hierarchy = {
         "Lead Lists": ["Prospect Lists", "Contact Databases"],
         "Sales Scripts": ["Cold Call Scripts", "Follow-up Templates"],
         "Market Analysis Reports": ["Competitive Analysis", "Market Research"]
-    },
-    "Product": {
-        "Product Specifications": ["Product Requirements Documents", "Feature Lists"],
-        "User Manuals": ["Instruction Guides", "Installation Manuals"],
-        "Product Roadmaps": ["Development Plans", "Timeline Documents"],
-        "Market Research Reports": ["Consumer Research", "Trend Analysis"],
-        "Design Documents": ["Wireframes", "Mockups"],
-        "Release Notes": ["Version Updates", "Feature Changes"]
     }
 }
 
