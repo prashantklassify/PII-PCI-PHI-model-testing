@@ -178,7 +178,7 @@ def display_results(results):
 st.title("Enhanced Named Entity Recognition (NER) Streamlit App")
 
 # User input for text
-text = st.text_area('''Enter text for NER processing", "")
+text = st.text_area("Enter text for NER processing", "")
 # Button to process the text
 if st.button("Run NER Models"):
     st.subheader("Custom NER Pipeline Results")
