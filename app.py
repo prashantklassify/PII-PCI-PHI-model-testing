@@ -73,7 +73,6 @@ hierarchy = {
         "Operational Audits": ["Performance Assessments", "Compliance Reports"]
     },
     "Personal": {
-        "Personal Statements": ["Statements of Purpose", "Biographies"],
         "Life Plans": ["Personal Goals", "Vision Boards"],
         "Health Records": ["Medical Histories", "Fitness Plans"],
         "Financial Plans": ["Budgeting Worksheets", "Savings Plans"],
