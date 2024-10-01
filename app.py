@@ -1,130 +1,112 @@
 import streamlit as st
-import os
-import zipfile
-import tempfile
-import textract  # To extract text from documents
-from transformers import AutoTokenizer, AutoModel, pipeline
-import torch
-from sklearn.svm import SVC
-from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import make_pipeline
-import numpy as np
+from transformers import pipeline
+import pandas as pd
+import re
 
-# Define NER pipelines
-ner_model_pii = pipeline("token-classification", model="iiiorg/piiranha-v1-detect-personal-information")
-ner_model_pci = pipeline("token-classification", model="lakshyakh93/deberta_finetuned_pii")
-ner_model_phi = pipeline("token-classification", model="obi/deid_roberta_i2b2")
-ner_model_medical = pipeline("token-classification", model="blaze999/Medical-NER")
+# Load the models for NER
+models = {
+    "PII": "iiiorg/piiranha-v1-detect-personal-information",
+    "PCI": "lakshyakh93/deberta_finetuned_pii",
+    "PHI": "obi/deid_roberta_i2b2",
+    "Medical NER": "blaze999/Medical-NER"
+}
 
-# Function to extract text from different document types
-def extract_text_from_documents(doc_path):
-    try:
-        text = textract.process(doc_path).decode('utf-8')
-    except Exception as e:
-        print(f"Error extracting text from {doc_path}: {e}")
-        return None
-    return text
+model_pii = pipeline("token-classification", model=models["PII"])
+model_pci = pipeline("token-classification", model=models["PCI"])
+model_phi = pipeline("token-classification", model=models["PHI"])
+model_medical = pipeline("token-classification", model=models["Medical NER"])
 
-# Function to generate embeddings using HuggingFace models
-def get_text_embeddings(text_list, model_name="sentence-transformers/all-mpnet-base-v2"):
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModel.from_pretrained(model_name)
+# Define the accepted labels for each category
+accepted_pii_labels = set()  # Accept all categories under PII
+accepted_pci_labels = {"JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
+                       "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6",
+                       "CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD",
+                       "PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE",
+                       "LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV",
+                       "NEARBYGPSCOORDINATE", "SEXTYPE"}
 
-    embeddings = []
-    for text in text_list:
-        inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True)
-        with torch.no_grad():
-            outputs = model(**inputs)
-        embeddings.append(outputs.last_hidden_state.mean(dim=1).squeeze().numpy())
+accepted_phi_labels = {"staff", "HOSP", "AGE"}
 
-    return np.array(embeddings)
+accepted_medical_labels = {"BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT",
+                           "DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS",
+                           "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"}
 
-# Function to perform document classification using SVM
-def classify_documents_svm(embeddings, possible_classes):
-    # Simulate binary classification using text matches for clustering
-    clf = make_pipeline(StandardScaler(), SVC(kernel='linear', probability=True))
-    clf.fit(embeddings, possible_classes)
+# Define sliders for confidence thresholds
+threshold_pii = st.slider("Confidence Threshold for PII Model", 0.0, 1.0, 0.75, 0.05)
+threshold_pci = st.slider("Confidence Threshold for PCI Model", 0.0, 1.0, 0.75, 0.05)
+threshold_phi = st.slider("Confidence Threshold for PHI Model", 0.0, 1.0, 0.75, 0.05)
+threshold_medical = st.slider("Confidence Threshold for Medical NER Model", 0.0, 1.0, 0.75, 0.05)
 
-    # Predict on the same data to simulate classification (usually you'd have test data)
-    predictions = clf.predict(embeddings)
-    return predictions
+# Define a function to clean and merge tokens
+def clean_and_merge_tokens(entities, threshold):
+    cleaned_entities = []
+    for entity in entities:
+        if entity['score'] >= threshold:
+            # Clean token
+            token = entity['word'].replace("▁", "").replace("Ġ", "")
+            entity['word'] = token
+            
+            # Merge contiguous entities of the same type
+            if cleaned_entities and cleaned_entities[-1]['entity'] == entity['entity'] \
+                    and cleaned_entities[-1]['end'] == entity['start']:
+                cleaned_entities[-1]['word'] += token
+                cleaned_entities[-1]['end'] = entity['end']
+                cleaned_entities[-1]['score'] = max(cleaned_entities[-1]['score'], entity['score'])  # Take the max confidence
+            else:
+                cleaned_entities.append(entity)
+    return cleaned_entities
 
-# Function to apply NER based on document classification
-def apply_ner(text, classification):
-    if classification == 'Resume':
-        ner_results = ner_model_pii(text)
-    elif classification == 'Invoice':
-        ner_results = ner_model_pci(text)
-    elif classification == 'Report':
-        ner_results = ner_model_phi(text)
-    elif classification == 'Offer Letter':
-        ner_results = ner_model_medical(text)
+# Custom NER pipeline function
+def custom_pipeline(text):
+    # Run the text through the PII model
+    pii_results = model_pii(text)
+    # Accepting all categories for PII as no specific labels were mentioned
+    pii_results = clean_and_merge_tokens(pii_results, threshold_pii)
+
+    # Run the text through the PHI model
+    phi_results = model_phi(text)
+    phi_results = [entity for entity in phi_results if entity['entity'].split("-")[-1] in accepted_phi_labels]
+    phi_results = clean_and_merge_tokens(phi_results, threshold_phi)
+
+    # Run the text through the PCI model
+    pci_results = model_pci(text)
+    pci_results = [entity for entity in pci_results if entity['entity'].split("-")[-1] in accepted_pci_labels]
+    pci_results = clean_and_merge_tokens(pci_results, threshold_pci)
+
+    # Run Medical NER model independently on the original text
+    medical_results = model_medical(text)
+    medical_results = [entity for entity in medical_results if entity['entity'].split("-")[-1] in accepted_medical_labels]
+    medical_results = clean_and_merge_tokens(medical_results, threshold_medical)
+
+    # Combine all results
+    combined_results = pii_results + phi_results + pci_results + medical_results
+
+    return combined_results
+
+# Function to display results in a table format
+def display_results(results):
+    table_data = [{
+        "Entity": result['word'],
+        "Entity Type": result['entity'].split("-")[-1],
+        "Confidence (%)": f"{result['score'] * 100:.2f}"
+    } for result in results]
+    return pd.DataFrame(table_data)
+
+# Streamlit app layout
+st.title("Enhanced Named Entity Recognition (NER) Streamlit App")
+
+# User input for text
+text = st.text_area('''Enter text for NER processing", "")
+# Button to process the text
+if st.button("Run NER Models"):
+    st.subheader("Custom NER Pipeline Results")
+    
+    # Run the custom pipeline
+    predictions = custom_pipeline(text)
+
+    # Display results in a table
+    if predictions:
+        results_table = display_results(predictions)
+        st.table(results_table)
     else:
-        ner_results = []  # Default empty for unknown classifications
-    return ner_results
-
-# Streamlit interface for uploading the folder and displaying results
-def main():
-    st.title("Document Clustering and Sensitive Information Extraction")
-
-    # Step 1: Upload a ZIP file containing documents
-    uploaded_zip = st.file_uploader("Upload a zip file containing documents", type="zip")
-
-    if uploaded_zip is not None:
-        # Create a temporary directory to extract the uploaded zip file
-        with tempfile.TemporaryDirectory() as temp_dir:
-            zip_path = os.path.join(temp_dir, uploaded_zip.name)
-
-            # Save the uploaded zip file
-            with open(zip_path, "wb") as f:
-                f.write(uploaded_zip.getbuffer())
-
-            # Extract the zip file
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(temp_dir)
-
-            # Get list of all documents
-            doc_files = [os.path.join(temp_dir, file) for file in os.listdir(temp_dir)]
-
-            # Step 2: Extract text from each document
-            st.write("Extracting text from documents...")
-            documents = []
-            for file_path in doc_files:
-                text = extract_text_from_documents(file_path)
-                if text:
-                    documents.append((file_path, text))
-
-            if not documents:
-                st.write("No valid documents found.")
-                return
-
-            # Step 3: Generate embeddings for text documents
-            st.write("Generating embeddings for documents...")
-            texts = [doc[1] for doc in documents]  # Extract text for embeddings
-            embeddings = get_text_embeddings(texts)
-
-            # Step 4: Use SVM for classification
-            st.write("Classifying documents using SVM...")
-            possible_classes = ['Resume', 'Invoice', 'Report', 'Offer Letter']
-            classifications = classify_documents_svm(embeddings, possible_classes)
-
-            # Step 5: Apply NER to classified documents
-            st.write("Applying Named Entity Recognition (NER) to extract sensitive information...")
-
-            # Show the NER results document-wise
-            for i, (file_path, doc_text) in enumerate(documents):
-                classification = classifications[i]
-                st.subheader(f"Document: {os.path.basename(file_path)} (Classified as: {classification})")
-
-                # Apply NER based on the classification
-                ner_results = apply_ner(doc_text, classification)
-                
-                # Display NER results
-                if ner_results:
-                    for entity in ner_results:
-                        st.write(f"Entity: {entity['word']}, Label: {entity['entity']}, Confidence: {entity['score']:.2f}")
-                else:
-                    st.write("No sensitive information found.")
-
-if __name__ == "__main__":
-    main()
+        st.write("No entities detected.")
