@@ -27,13 +27,13 @@ possible_classes = [
     'Market Research Report', 'Feasibility Study', 'Project Charter',
     'Vendor Agreement', 'Statement of Work', 'Confidentiality Agreement',
 
-    # Education
-    'Transcript', 'Diploma', 'Course Syllabus', 'Thesis', 'Research Paper',
-    'Dissertation', 'Curriculum Vitae', 'Application Letter', 'Scholarship Application',
-    'Grant Proposal', 'Course Registration Form', 'Student Handbook',
-    'Faculty Handbook', 'Academic Calendar', 'Grade Report', 'Student Evaluation',
-    'Internship Report', 'Field Study Report', 'Project Report', 'Lesson Plan',
-    'Course Completion Certificate', 'Certificate of Achievement',
+    # # Education
+    # 'Transcript', 'Diploma', 'Course Syllabus', 'Thesis', 'Research Paper',
+    # 'Dissertation', 'Curriculum Vitae', 'Application Letter', 'Scholarship Application',
+    # 'Grant Proposal', 'Course Registration Form', 'Student Handbook',
+    # 'Faculty Handbook', 'Academic Calendar', 'Grade Report', 'Student Evaluation',
+    # 'Internship Report', 'Field Study Report', 'Project Report', 'Lesson Plan',
+    # 'Course Completion Certificate', 'Certificate of Achievement',
 
     # Health
     'Patient Record', 'Medical Report', 'Prescription', 'Surgical Report',
@@ -49,11 +49,11 @@ possible_classes = [
     'Will', 'Trust Document', 'Settlement Agreement', 'Trademark Registration',
     'Copyright Registration', 'Patent Application',
 
-    # Technical
-    'Technical Specification', 'User Manual', 'Installation Guide', 'Troubleshooting Guide',
-    'API Documentation', 'Software Requirement Specification', 'System Architecture Document',
-    'Test Plan', 'Test Report', 'Release Notes', 'Change Log', 'Technical Proposal',
-    'Engineering Report', 'Design Document', 'Prototype Report',
+    # # Technical
+    # 'Technical Specification', 'User Manual', 'Installation Guide', 'Troubleshooting Guide',
+    # 'API Documentation', 'Software Requirement Specification', 'System Architecture Document',
+    # 'Test Plan', 'Test Report', 'Release Notes', 'Change Log', 'Technical Proposal',
+    # 'Engineering Report', 'Design Document', 'Prototype Report',
 
     # Personal
     'Resume', 'Cover Letter', 'Personal Statement', 'Portfolio', 'Job Application',
@@ -91,10 +91,9 @@ possible_classes = [
     # (More unique categories can be added to meet the desired count)
 ] * 45  # This will replicate the list above until we reach around 1000
 main_categories = [
-    'Business', 'Education', 'Health', 'Legal', 'Technical', 'Personal',
-    'Government', 'Marketing', 'Miscellaneous'
+    'Business'
 ]
-# Define the accepted labels for each category
+# , 'Education', 'Health', 'Legal', 'Technical', 'Personal','Government', 'Marketing', 'Miscellaneous'
 accepted_pii_labels = set()  # Accept all categories under PII
 accepted_pci_labels = {"JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
                        "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6",
