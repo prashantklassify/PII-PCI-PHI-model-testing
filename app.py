@@ -5,7 +5,7 @@ import pandas as pd
 # Load the models for NER and classification
 models = {
     "PII": "iiiorg/piiranha-v1-detect-personal-information",
-    "PCI": "lakshyakh93/deberta_finetuned_pii",
+    "PCI": "urchade/gliner_multi_pii-v1",
     "PHI": "obi/deid_roberta_i2b2",
     "Medical NER": "blaze999/Medical-NER"
 }
