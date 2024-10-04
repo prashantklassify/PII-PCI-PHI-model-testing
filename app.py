@@ -89,50 +89,44 @@ threshold_phi = st.slider("Confidence Threshold for PHI Model", 0.0, 1.0, 0.75, 
 threshold_medical = st.slider("Confidence Threshold for Medical NER Model", 0.0, 1.0, 0.75, 0.05)
 
 # Define a function to clean and merge tokens
-def clean_and_merge_tokens(entities, threshold):
+def clean_and_merge_tokens(entities):
     cleaned_entities = []
     for entity in entities:
-        if entity['score'] >= threshold:
-            # Clean token
-            token = entity['word'].replace("▁", "").replace("Ġ", "")
-            entity['word'] = token
-            
-            # Merge contiguous entities of the same type
-            if cleaned_entities and cleaned_entities[-1]['entity'] == entity['entity'] \
-                    and cleaned_entities[-1]['end'] == entity['start']:
-                cleaned_entities[-1]['word'] += token
-                cleaned_entities[-1]['end'] = entity['end']
-                cleaned_entities[-1]['score'] = max(cleaned_entities[-1]['score'], entity['score'])  # Take the max confidence
-            else:
-                cleaned_entities.append(entity)
+        # Clean token
+        token = entity['word'].replace("▁", "").replace("Ġ", "")
+        entity['word'] = token
+        
+        # Merge contiguous entities of the same type
+        if cleaned_entities and cleaned_entities[-1]['entity'] == entity['entity'] \
+                and cleaned_entities[-1]['end'] == entity['start']:
+            cleaned_entities[-1]['word'] += token
+            cleaned_entities[-1]['end'] = entity['end']
+            cleaned_entities[-1]['score'] = max(cleaned_entities[-1]['score'], entity['score'])  # Take the max confidence
+        else:
+            cleaned_entities.append(entity)
     return cleaned_entities
 
-# Custom NER pipeline function
 # Custom NER pipeline function
 def custom_pipeline(text):
     # Run the text through the PII model
     pii_results = model_pii(text)
-    pii_results = clean_and_merge_tokens(pii_results, threshold_pii)
-    # Filter PII results
-    pii_results = [entity for entity in pii_results if entity['entity'] in accepted_pii_labels]
+    pii_results = [entity for entity in pii_results if entity['entity'].split("-")[-1] in accepted_pii_labels]
+    pii_results = clean_and_merge_tokens(pii_results)
 
     # Run the text through the PHI model
     phi_results = model_phi(text)
-    phi_results = clean_and_merge_tokens(phi_results, threshold_phi)
-    # Filter PHI results
     phi_results = [entity for entity in phi_results if entity['entity'].split("-")[-1] in accepted_phi_labels]
+    phi_results = clean_and_merge_tokens(phi_results)
 
     # Run the text through the PCI model
     pci_results = model_pci(text)
-    pci_results = clean_and_merge_tokens(pci_results, threshold_pci)
-    # Filter PCI results
     pci_results = [entity for entity in pci_results if entity['entity'].split("-")[-1] in accepted_pci_labels]
+    pci_results = clean_and_merge_tokens(pci_results)
 
-    # Run the text through the Medical NER model
+    # Run Medical NER model independently on the original text
     medical_results = model_medical(text)
-    medical_results = clean_and_merge_tokens(medical_results, threshold_medical)
-    # Filter Medical NER results
     medical_results = [entity for entity in medical_results if entity['entity'].split("-")[-1] in accepted_medical_labels]
+    medical_results = clean_and_merge_tokens(medical_results)
 
     # Combine all results
     combined_results = pii_results + phi_results + pci_results + medical_results
