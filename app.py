@@ -32,54 +32,10 @@ classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnl
 
 # Define the hierarchical categories for document classification
 hierarchy = {
-    "Legal": {
-        "Contracts": ["Sales Contracts", "Employment Contracts"],
-        "Legal Briefs": ["Case Briefs", "Motion Briefs"],
-        "Memorandums": ["Legal Memos", "Opinion Memos"],
-        "Compliance Documents": ["Compliance Checklists", "Audit Reports"],
-        "Court Filings": ["Pleadings", "Court Orders"],
-        "Legal Policies": ["Workplace Policies", "Privacy Policies"]
-    },
-    "Hiring Department": {
-        "Resumes": ["CVs", "Cover Letters"],
-        "Employee Handbooks": ["Company Policies", "Code of Conduct"],
-        "Performance Reviews": ["Annual Review Forms", "Feedback Forms"],
-        "Job Descriptions": ["Position Specifications", "Role Summaries"],
-        "Onboarding Documents": ["Orientation Guides", "Training Materials"],
-        "Termination Letters": ["Resignation Letters", "Dismissal Notices"]
-    },
-    "Finance": {
-        "Financial Statements": ["Balance Sheets", "Income Statements"],
-        "Budgets": ["Annual Budgets", "Project Budgets"],
-        "Invoices": ["Service Invoices", "Purchase Invoices"],
-        "Tax Returns": ["Personal Returns", "Corporate Returns"],
-        "Expense Reports": ["Travel Expenses", "Reimbursement Forms"],
-        "Investment Proposals": ["Business Investment Plans", "Risk Assessments"]
-    },
-    "Insurance": {
-        "Policy Documents": ["Insurance Policies", "Endorsements"],
-        "Claim Forms": ["Health Claim Forms", "Auto Insurance Claims"],
-        "Underwriting Guidelines": ["Risk Assessment Guidelines", "Criteria Lists"],
-        "Coverage Summaries": ["Benefits Overview", "Coverage Explanations"],
-        "Renewal Notices": ["Policy Renewal Forms", "Reminder Letters"],
-        "Incident Reports": ["Claims Incident Reports", "Loss Assessments"]
-    },
-    "Operations": {
-        "Standard Operating Procedures": ["Process Manuals", "Workflow Guides"],
-        "Inventory Reports": ["Stock Levels", "Inventory Audits"],
-        "Project Plans": ["Project Charters", "Gantt Charts"],
-        "Quality Assurance Documents": ["Inspection Reports", "Testing Protocols"],
-        "Logistics Plans": ["Delivery Schedules", "Shipping Documents"],
-        "Operational Audits": ["Performance Assessments", "Compliance Reports"]
-    },
-    "Sales": {
-        "Sales Proposals": ["Business Proposals", "Bids"],
-        "Sales Reports": ["Weekly Sales Reports", "Performance Dashboards"],
-        "Customer Contracts": ["Service Agreements", "Client Contracts"],
-        "Lead Lists": ["Prospect Lists", "Contact Databases"],
-        "Sales Scripts": ["Cold Call Scripts", "Follow-up Templates"],
-        "Market Analysis Reports": ["Competitive Analysis", "Market Research"]
-    }
+    "Hiring Department": {"Resumes","Job Descriptions","Onboarding Documents","Offboarding Documents"},
+    "Finance": {"Cash Flow Statement","Income Statement","Notes","Others"},
+    "Sales":{"Sales Proposal","Sales Pitch"," Follow up email","Plausible Lists"},
+    "Others":{"others"}
 }
 
 # Define sliders for confidence thresholds
