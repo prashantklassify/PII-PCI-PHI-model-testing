@@ -32,10 +32,27 @@ classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnl
 
 # Define the hierarchical categories for document classification
 hierarchy = {
-    "Hiring Department": {"Resumes","Job Descriptions","Onboarding Documents","Offboarding Documents"},
-    "Finance": {"Cash Flow Statement","Income Statement","Notes","Others"},
-    "Sales":{"Sales Proposal","Sales Pitch"," Follow up email","Plausible Lists"},
-    "Others":{"others"}
+    "Hiring Department": {
+        "Resumes": ["Intern", "Experienced", "Manager"],
+        "Job Descriptions": ["Full-time", "Part-time", "Temporary"],
+        "Onboarding Documents": ["HR forms", "Welcome letter"],
+        "Offboarding Documents": ["Exit survey", "Resignation letter"]
+    },
+    "Finance": {
+        "Cash Flow Statement": ["Annual", "Quarterly"],
+        "Income Statement": ["Annual", "Quarterly"],
+        "Notes": ["Accounting Notes", "Tax Notes"],
+        "Others": ["Miscellaneous"]
+    },
+    "Sales": {
+        "Sales Proposal": ["Formal", "Informal"],
+        "Sales Pitch": ["Presentation", "Email"],
+        "Follow-up Email": ["Reminder", "Thank You"],
+        "Plausible Lists": ["Leads", "Prospects"]
+    },
+    "Others": {
+        "others": ["Unclassified"]
+    }
 }
 
 # Define sliders for confidence thresholds
@@ -90,23 +107,16 @@ def custom_pipeline(text):
     return combined_results
 
 
-# Document classification based on hierarchy
-def classify_document(text):
-    # First classify the main categories
-    main_classifications = classifier(text, candidate_labels=list(hierarchy.keys()), multi_label=False)
-    main_category = main_classifications['labels'][0]
-    
-    # Now classify the sub-categories within the identified main category
-    sub_category_classes = list(hierarchy[main_category].keys())
-    sub_classifications = classifier(text, candidate_labels=sub_category_classes, multi_label=False)
-    sub_category = sub_classifications['labels'][0]
-    
-    # Classify at the third level (specific documents)
-    third_level_classes = hierarchy[main_category][sub_category]
-    third_classifications = classifier(text, candidate_labels=third_level_classes, multi_label=False)
-    specific_doc_type = third_classifications['labels'][0]
-    
-    return main_category, sub_category, specific_doc_type
+# Recursive Document classification based on hierarchy
+def classify_document_recursive(text, current_level):
+    if isinstance(current_level, dict):
+        classification = classifier(text, candidate_labels=list(current_level.keys()), multi_label=False)
+        top_category = classification['labels'][0]
+        return top_category, classify_document_recursive(text, current_level[top_category])
+    else:
+        # When we reach the final level with specific document types
+        final_classification = classifier(text, candidate_labels=current_level, multi_label=False)
+        return final_classification['labels'][0]
 
 # Streamlit App layout
 st.title("Document Classification and NER")
@@ -118,11 +128,11 @@ input_text = st.text_area("Enter text for classification and NER:")
 if st.button("Classify and Extract Entities"):
     if input_text:
         # Perform document classification
-        main_category, sub_category, specific_doc_type = classify_document(input_text)
+        main_category, sub_category = classify_document_recursive(input_text, hierarchy)
         
         st.write(f"Main Category: {main_category}")
-        st.write(f"Sub Category: {sub_category}")
-        st.write(f"Specific Document Type: {specific_doc_type}")
+        if isinstance(sub_category, str):
+            st.write(f"Sub Category: {sub_category}")
         
         # Perform NER
         ner_results = custom_pipeline(input_text)
