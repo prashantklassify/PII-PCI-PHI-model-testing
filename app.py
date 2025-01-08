@@ -9,39 +9,43 @@ models = {
     "PHI": "obi/deid_roberta_i2b2",
     "Medical NER": "blaze999/Medical-NER"
 }
-accepted_pii_labels = {'ACCOUNTNUM', 'BUILDINGNUM', 'CITY', 'CREDITCARDNUMBER', 'DATEOFBIRTH',
-                       'DRIVERLICENSENUM', 'EMAIL', 'GIVENNAME', 'IDCARDNUM', 'PASSWORD', 
-                       'SOCIALNUM', 'STREET', 'SURNAME', 'TAXNUM', 'TELEPHONENUM', 'USERNAME'}
-accepted_pci_labels = {
-    "JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
-    "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6",
-    "CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD",
-    "PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE",
-    "LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV",
-    "NEARBYGPSCOORDINATE", "SEXTYPE"
+
+# Accepted labels for each model
+accepted_labels = {
+    "PII": {'ACCOUNTNUM', 'BUILDINGNUM', 'CITY', 'CREDITCARDNUMBER', 'DATEOFBIRTH',
+            'DRIVERLICENSENUM', 'EMAIL', 'GIVENNAME', 'IDCARDNUM', 'PASSWORD',
+            'SOCIALNUM', 'STREET', 'SURNAME', 'TAXNUM', 'TELEPHONENUM', 'USERNAME'},
+    "PCI": {"JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
+            "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6",
+            "CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD",
+            "PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE",
+            "LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV",
+            "NEARBYGPSCOORDINATE", "SEXTYPE"},
+    "PHI": {"staff", "HOSP", "AGE"},
+    "Medical": {"BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT",
+                "DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS",
+                "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"}
 }
-accepted_phi_labels = {"staff", "HOSP", "AGE"}
-accepted_medical_labels = {
-    "BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT",
-    "DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS",
-    "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"
-}
+
+# Load models
 model_pii = pipeline("token-classification", model=models["PII"])
 model_pci = pipeline("token-classification", model=models["PCI"])
 model_phi = pipeline("token-classification", model=models["PHI"])
 model_medical = pipeline("token-classification", model=models["Medical NER"])
 
 # Threshold sliders
-threshold_pii = st.slider("Confidence Threshold for PII Model", 0.0, 1.0, 0.75, 0.05)
-threshold_pci = st.slider("Confidence Threshold for PCI Model", 0.0, 1.0, 0.75, 0.05)
-threshold_phi = st.slider("Confidence Threshold for PHI Model", 0.0, 1.0, 0.75, 0.05)
-threshold_medical = st.slider("Confidence Threshold for Medical NER Model", 0.0, 1.0, 0.75, 0.05)
+thresholds = {
+    "PII": st.slider("Confidence Threshold for PII Model", 0.0, 1.0, 0.75, 0.05),
+    "PCI": st.slider("Confidence Threshold for PCI Model", 0.0, 1.0, 0.75, 0.05),
+    "PHI": st.slider("Confidence Threshold for PHI Model", 0.0, 1.0, 0.75, 0.05),
+    "Medical": st.slider("Confidence Threshold for Medical NER Model", 0.0, 1.0, 0.75, 0.05),
+}
 
 # Function to clean and merge tokens
-def clean_and_merge_tokens(entities, threshold):
+def clean_and_merge_tokens(entities, threshold, accepted_labels):
     cleaned_entities = []
     for entity in entities:
-        if entity['score'] < threshold:
+        if entity['score'] < threshold or entity['entity'].split("-")[-1] not in accepted_labels:
             continue
         token = entity['word'].replace("▁", "").replace("Ġ", "")
         entity['word'] = token
@@ -64,24 +68,21 @@ def resolve_conflicts(entities):
 
 # Custom pipeline function
 def custom_pipeline(text):
-    pii_results = model_pii(text)
-    pii_results = clean_and_merge_tokens(pii_results, threshold_pii)
-    pci_results = model_pci(text)
-    pci_results = clean_and_merge_tokens(pci_results, threshold_pci)
-    phi_results = model_phi(text)
-    phi_results = clean_and_merge_tokens(phi_results, threshold_phi)
-    medical_results = model_medical(text)
-    medical_results = clean_and_merge_tokens(medical_results, threshold_medical)
-
-    combined_results = resolve_conflicts(pii_results + pci_results + phi_results + medical_results)
-    return combined_results
+    results = []
+    for model_name, model in [("PII", model_pii), ("PCI", model_pci), ("PHI", model_phi), ("Medical", model_medical)]:
+        model_results = model(text)
+        model_results = clean_and_merge_tokens(model_results, thresholds[model_name], accepted_labels[model_name])
+        for res in model_results:
+            res["entity"] = model_name
+        results.extend(model_results)
+    return resolve_conflicts(results)
 
 # Highlight text with colors
 def highlight_text(text, entities):
     colors = {
         "PII": "#FFA07A",  # Light Salmon
         "PCI": "#ADD8E6",  # Light Blue
-        "PHI": "#98FB98",  # Pale Green
+        "PHI": "#FFD700",  # Gold (shared with Medical)
         "Medical": "#FFD700"  # Gold
     }
     highlighted_text = ""
@@ -90,7 +91,7 @@ def highlight_text(text, entities):
     # Sort entities by start position
     entities = sorted(entities, key=lambda x: x['start'])
     for entity in entities:
-        category = entity['entity'].split("-")[-1]
+        category = entity['entity']
         color = colors.get(category, "#FFFFFF")  # Default to white
         highlighted_text += text[current_pos:entity['start']]
         highlighted_text += f"<span style='background-color:{color}'>{text[entity['start']:entity['end']]}</span>"
@@ -115,7 +116,7 @@ if st.button("Classify and Extract Entities"):
         if ner_results:
             table_data = [{
                 "Entity": entity['word'],
-                "Entity Type": entity['entity'].split("-")[-1],
+                "Entity Type": entity['entity'],
                 "Start": entity['start'],
                 "End": entity['end'],
                 "Confidence (%)": f"{entity['score'] * 100:.2f}"
