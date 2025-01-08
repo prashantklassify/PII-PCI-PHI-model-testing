@@ -93,9 +93,48 @@ def custom_pipeline(text):
         model_results = normalize_scores(model_results)
         model_results = filter_overlaps(model_results)
         for res in model_results:
-            res["entity"] = res["entity"].split('-')[-1]
+            res["entity"] = model_name
         results.extend(model_results)
     return resolve_conflicts(results)
+
+# Highlight text with colors
+def highlight_text(text, entities):
+    colors = {
+        "PII": "#FFA07A",  # Light Salmon
+        "PCI": "#ADD8E6",  # Light Blue
+        "PHI": "#FFD700",  # Gold (shared with Medical)
+        "Medical": "#FFD700"  # Gold
+    }
+    highlighted_text = ""
+    current_pos = 0
+
+    # Sort entities by start position
+    entities = sorted(entities, key=lambda x: x['start'])
+    for entity in entities:
+        category = entity['entity']
+        color = colors.get(category, "#FFFFFF")  # Default to white
+        highlighted_text += text[current_pos:entity['start']]
+        highlighted_text += f"<span style='background-color:{color}'>{text[entity['start']:entity['end']]}</span>"
+        current_pos = entity['end']
+    highlighted_text += text[current_pos:]
+    return highlighted_text
+
+# Categorize tokens
+def categorize_tokens(text, entities):
+    total_tokens = len(text.split())
+    categories = {"PII": 0, "PCI": 0, "PHI": 0, "Others": 0}
+
+    covered_positions = set()
+    for entity in entities:
+        category = "PHI" if entity['entity'] in ["PHI", "Medical"] else entity['entity']
+        categories[category] += len(text[entity['start']:entity['end']].split())
+        covered_positions.update(range(entity['start'], entity['end']))
+
+    uncovered_tokens = [word for i, word in enumerate(text.split()) if i not in covered_positions]
+    categories["Others"] += len(uncovered_tokens)
+
+    percentages = {key: (count / total_tokens) * 100 for key, count in categories.items()}
+    return percentages
 
 # Streamlit App layout
 st.title("Document Classification and NER")
@@ -105,6 +144,10 @@ input_text = st.text_area("Enter text for classification and NER:")
 if st.button("Classify and Extract Entities"):
     if input_text:
         ner_results = custom_pipeline(input_text)
+
+        st.subheader("Highlighted Text with Entities:")
+        highlighted_html = highlight_text(input_text, ner_results)
+        st.markdown(highlighted_html, unsafe_allow_html=True)
 
         st.subheader("Extracted Entities:")
         if ner_results:
@@ -118,5 +161,10 @@ if st.button("Classify and Extract Entities"):
             st.table(pd.DataFrame(table_data))
         else:
             st.write("No entities detected.")
+
+        st.subheader("Category Percentages:")
+        percentages = categorize_tokens(input_text, ner_results)
+        for category, percentage in percentages.items():
+            st.write(f"{category}: {percentage:.2f}%")
     else:
         st.write("Please enter some text for classification and NER.")
