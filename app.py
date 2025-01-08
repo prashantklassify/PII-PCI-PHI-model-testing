@@ -14,17 +14,17 @@ models = {
 accepted_labels = {
     "PII": {'ACCOUNTNUM', 'BUILDINGNUM', 'CITY', 'CREDITCARDNUMBER', 'DATEOFBIRTH',
             'DRIVERLICENSENUM', 'EMAIL', 'GIVENNAME', 'IDCARDNUM', 'PASSWORD',
-            'SOCIALNUM', 'STREET', 'SURNAME', 'TAXNUM', 'TELEPHONENUM','CREDITCARDNUMBER', 'USERNAME'},
+            'SOCIALNUM', 'STREET', 'SURNAME', 'TAXNUM', 'TELEPHONENUM', 'USERNAME'},
     "PCI": {"JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
             "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6",
             "CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD",
             "PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE",
-            "LITECOINADDRESS", "MAC", "CREDITCARDISSUER","PREFIX", "CREDITCARDCVV","CREDITCARDISSUER","IP","STREETADDRESS","SSN","SECONDARYADDRESS","USERAGENT","PIN",
+            "LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV",
             "NEARBYGPSCOORDINATE", "SEXTYPE"},
-    "PHI": {"staff", "HOSP", "AGE","ID","PATIENT"},
+    "PHI": {"staff", "HOSP", "AGE"},
     "Medical": {"BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT",
-                "DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS","HEIGHT"
-                "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE","ACTIVITY","COLOR","COREFERENCE","DETAILED_DESCRIPTION","DIAGNOSTIC_PROCEDURE"}
+                "DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS",
+                "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"}
 }
 
 # Load models
@@ -66,12 +66,32 @@ def resolve_conflicts(entities):
             resolved[span] = entity
     return list(resolved.values())
 
+# Normalize scores to avoid discrepancies
+def normalize_scores(entities):
+    max_score = max(entity['score'] for entity in entities) if entities else 1.0
+    for entity in entities:
+        entity['score'] /= max_score
+    return entities
+
+# Filter overlapping entities
+def filter_overlaps(entities):
+    sorted_entities = sorted(entities, key=lambda x: (x['start'], -x['end']))
+    filtered = []
+    for entity in sorted_entities:
+        if not filtered or filtered[-1]['end'] <= entity['start']:
+            filtered.append(entity)
+    return filtered
+
 # Custom pipeline function
 def custom_pipeline(text):
     results = []
-    for model_name, model in [("PII", model_pii), ("PCI", model_pci), ("PHI", model_phi), ("Medical", model_medical)]:
+    for model_name, model in [
+        ("PII", model_pii), ("PCI", model_pci), ("PHI", model_phi), ("Medical", model_medical)
+    ]:
         model_results = model(text)
         model_results = clean_and_merge_tokens(model_results, thresholds[model_name], accepted_labels[model_name])
+        model_results = normalize_scores(model_results)
+        model_results = filter_overlaps(model_results)
         for res in model_results:
             res["entity"] = model_name
         results.extend(model_results)
@@ -124,7 +144,7 @@ input_text = st.text_area("Enter text for classification and NER:")
 if st.button("Classify and Extract Entities"):
     if input_text:
         ner_results = custom_pipeline(input_text)
-        
+
         st.subheader("Highlighted Text with Entities:")
         highlighted_html = highlight_text(input_text, ner_results)
         st.markdown(highlighted_html, unsafe_allow_html=True)
