@@ -99,6 +99,23 @@ def highlight_text(text, entities):
     highlighted_text += text[current_pos:]
     return highlighted_text
 
+# Categorize tokens
+def categorize_tokens(text, entities):
+    total_tokens = len(text.split())
+    categories = {"PII": 0, "PCI": 0, "PHI": 0, "Others": 0}
+
+    covered_positions = set()
+    for entity in entities:
+        category = "PHI" if entity['entity'] in ["PHI", "Medical"] else entity['entity']
+        categories[category] += len(text[entity['start']:entity['end']].split())
+        covered_positions.update(range(entity['start'], entity['end']))
+
+    uncovered_tokens = [word for i, word in enumerate(text.split()) if i not in covered_positions]
+    categories["Others"] += len(uncovered_tokens)
+
+    percentages = {key: (count / total_tokens) * 100 for key, count in categories.items()}
+    return percentages
+
 # Streamlit App layout
 st.title("Document Classification and NER")
 
@@ -124,5 +141,10 @@ if st.button("Classify and Extract Entities"):
             st.table(pd.DataFrame(table_data))
         else:
             st.write("No entities detected.")
+
+        st.subheader("Category Percentages:")
+        percentages = categorize_tokens(input_text, ner_results)
+        for category, percentage in percentages.items():
+            st.write(f"{category}: {percentage:.2f}%")
     else:
         st.write("Please enter some text for classification and NER.")
