@@ -1,58 +1,78 @@
-import streamlit as st
-from transformers import pipeline
-import json
+import React, { useState } from "react";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { motion } from "framer-motion";
+import { TextareaAutosize } from "@mui/material";
 
-# Load models dynamically
-def load_model(model_name):
-    return pipeline("token-classification", model=model_name)
+const SmartNERChatbot = () => {
+  const [query, setQuery] = useState("");
+  const [text, setText] = useState("");
+  const [response, setResponse] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-# Model mapping
-MODEL_MAP = {
-    "PII": "iiiorg/piiranha-v1-detect-personal-information",
-    "PCI": "lakshyakh93/deberta_finetuned_pii",
-    "PHI": "obi/deid_roberta_i2b2",
-    "Medical NER": "blaze999/Medical-NER"
-}
+  const handleExtract = async () => {
+    setLoading(true);
+    setResponse(null);
 
-# Simulated GPT function to interpret user queries
-def generate_model_config(user_query):
-    """Uses an LLM to generate model selection and parameters based on the query."""
-    # Simulated JSON response from an LLM
-    gpt_response = {
-        "models": ["PII", "Medical NER"],
-        "thresholds": {
-            "PII": 0.8,
-            "Medical NER": 0.7
-        }
+    try {
+      const llmResponse = await fetch("/api/llm-handler", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      
+      const config = await llmResponse.json(); // Smart model configuration
+      
+      const nerResponse = await fetch("/api/extract-entities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, config }),
+      });
+      
+      const result = await nerResponse.json();
+      setResponse(result);
+    } catch (error) {
+      console.error("Error:", error);
     }
-    return gpt_response
 
-# Function to process text based on LLM-configured models
-def process_text(text, user_query):
-    config = generate_model_config(user_query)
-    selected_models = config["models"]
-    thresholds = config["thresholds"]
-    
-    results = []
-    for model_name in selected_models:
-        model = load_model(MODEL_MAP[model_name])
-        model_results = model(text)
-        # Filter by threshold
-        filtered_results = [ent for ent in model_results if ent['score'] >= thresholds.get(model_name, 0.5)]
-        for ent in filtered_results:
-            ent["model"] = model_name
-        results.extend(filtered_results)
-    return results
+    setLoading(false);
+  };
 
-# Streamlit UI
-st.title("Smart AI NER Chatbot")
-user_query = st.text_input("Describe what you need (e.g., 'Find all personal data'):")
-input_text = st.text_area("Enter text for analysis:")
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-2xl mx-auto p-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xl font-bold text-center">Smart AI NER Chatbot</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <label className="font-semibold">Describe what you need:</label>
+          <Textarea
+            placeholder="e.g., 'Find all personal data excluding names'"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="mt-2 w-full"
+          />
+          <label className="font-semibold mt-4 block">Enter text for analysis:</label>
+          <TextareaAutosize
+            minRows={5}
+            placeholder="Paste or type text here..."
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            className="mt-2 w-full border rounded p-2"
+          />
+          <Button onClick={handleExtract} disabled={loading} className="mt-4 w-full">
+            {loading ? "Processing..." : "Extract Entities"}
+          </Button>
+          {response && (
+            <div className="mt-4 bg-gray-100 p-4 rounded">
+              <pre className="whitespace-pre-wrap text-sm">{JSON.stringify(response, null, 2)}</pre>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+};
 
-if st.button("Run Analysis"):
-    if user_query and input_text:
-        entities = process_text(input_text, user_query)
-        st.subheader("Extracted Entities:")
-        st.json(entities)  # Display results as JSON
-    else:
-        st.warning("Please enter a query and text for analysis.")
+export default SmartNERChatbot;
