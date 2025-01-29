@@ -72,6 +72,6 @@ if st.button("Send"):
         st.session_state.chat_history.append(("bot", f"Extracted Entities: {filtered_entities}"))
         
         # Refresh UI
-        st.experimental_rerun()
+        st.rerun()
     else:
         st.warning("Please enter both a query and text for analysis.")
