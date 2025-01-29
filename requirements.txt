@@ -4,5 +4,4 @@ torch
 scikit-learn
 numpy
 pandas
-React
 sentence_transformer
