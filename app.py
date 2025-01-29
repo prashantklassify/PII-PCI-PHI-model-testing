@@ -2,7 +2,6 @@ import streamlit as st
 from transformers import pipeline
 from sentence_transformers import SentenceTransformer, util
 import torch
-import random
 
 # Load Sentence Transformer model
 st_model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -15,21 +14,38 @@ MODEL_CATALOG = {
     "lakshyakh93/deberta_finetuned_pii":["JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS","ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6","CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD","PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE","LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV","NEARBYGPSCOORDINATE", "SEXTYPE"]
 }
 
+# Accepted labels for different categories
+accepted_labels = {
+    "PII": {'ACCOUNTNUM', 'BUILDINGNUM', 'CITY', 'DATEOFBIRTH',
+            'DRIVERLICENSENUM', 'EMAIL', 'GIVENNAME', 'IDCARDNUM', 'PASSWORD',
+            'SOCIALNUM', 'STREET', 'SURNAME', 'TAXNUM', 'TELEPHONENUM', 'USERNAME'},
+    "PCI": {"JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
+            "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6",
+            "CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD",
+            "PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE",
+            "LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV",
+            "NEARBYGPSCOORDINATE", "SEXTYPE"},
+    "PHI": {"staff", "HOSP", "AGE"},
+    "Medical": {"BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT",
+                "DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS",
+                "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"}
+}
+
 # Function to select the most relevant model based on the user query
 def select_model(user_query):
     query_embedding = st_model.encode(user_query, convert_to_tensor=True)
     best_model, best_score = None, -1
 
-    # Check for specific keywords in the query
-    pii_keywords = ["personal", "PII", "financial", "medical", "phone", "email", "address"]
-    medical_keywords = ["medical", "disease", "disorder", "medication", "clinical"]
-
-    if any(keyword in user_query.lower() for keyword in pii_keywords):
-        return "iiiorg/piiranha-v1-detect-personal-information"
-    elif any(keyword in user_query.lower() for keyword in medical_keywords):
+    # Directly map specific keywords to models
+    if "pii" in user_query.lower():
+        return "lakshyakh93/deberta_finetuned_pii"
+    elif "pci" in user_query.lower():
+        # For PCI-related queries, you can add a specific model for PCI if available
+        return "iiiorg/piiranha-v1-detect-personal-information"  # Replace with PCI model if needed
+    elif "medical" in user_query.lower():
         return "blaze999/Medical-NER"
 
-    # If no specific keywords, fallback to semantic similarity
+    # Otherwise, fall back to semantic similarity
     for model, descriptions in MODEL_CATALOG.items():
         desc_embeddings = st_model.encode(descriptions, convert_to_tensor=True)
         score = util.pytorch_cos_sim(query_embedding, desc_embeddings).max().item()
@@ -38,16 +54,28 @@ def select_model(user_query):
 
     return best_model
 
-# Function to process complex queries
-def handle_complex_queries(user_query, extracted_entities):
+# Function to filter and classify extracted entities into relevant categories
+def classify_entities(entities):
+    classified_entities = {"PII": [], "PCI": [], "PHI": [], "Medical": []}
+
+    for entity in entities:
+        entity_label = entity['entity']
+        for category, labels in accepted_labels.items():
+            if entity_label in labels:
+                classified_entities[category].append(entity)
+
+    return classified_entities
+
+# Function to process complex queries (e.g., "find PII excluding names")
+def handle_complex_queries(user_query, classified_entities):
     if "last names" in user_query.lower():
-        return [ent for ent in extracted_entities if ent['entity'] in ['SURNAME']]
-    elif "PII entries excluding names" in user_query.lower():
-        return [ent for ent in extracted_entities if ent['entity'] not in ['GIVENNAME', 'SURNAME']]
-    elif "PII and PCI entries" in user_query.lower():
-        return [ent for ent in extracted_entities if ent['entity'] in MODEL_CATALOG["iiiorg/piiranha-v1-detect-personal-information"] or ent['entity'] in MODEL_CATALOG["lakshyakh93/deberta_finetuned_pii"]]
+        return classified_entities["PII"], classified_entities["PHI"]
+    elif "PII excluding names" in user_query.lower():
+        return classified_entities["PII"]
+    elif "all" in user_query.lower():
+        return classified_entities
     else:
-        return extracted_entities
+        return classified_entities
 
 # Interactive chatbot-style UI
 st.title("💬 AI NER Chatbot")
@@ -75,7 +103,12 @@ if st.button("Send"):
             model_name = select_model(user_query)
             ner_pipeline = pipeline("ner", model=model_name)
             extracted_entities = ner_pipeline(user_text)
-            filtered_entities = handle_complex_queries(user_query, extracted_entities)
+
+            # Classify extracted entities into categories
+            classified_entities = classify_entities(extracted_entities)
+
+            # Handle complex queries
+            filtered_entities = handle_complex_queries(user_query, classified_entities)
         
         # Add messages to chat history
         st.session_state.chat_history.append(("user", user_query))
