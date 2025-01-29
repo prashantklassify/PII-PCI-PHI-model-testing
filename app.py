@@ -69,7 +69,11 @@ if "chat_history" not in st.session_state:
 for message in st.session_state.chat_history:
     role, text = message
     if role == "bot":
-        st.markdown(f"**🤖 Bot:** {text}")
+        # If the message contains a table, display it as HTML
+        if isinstance(text, str) and text.startswith("<table>"):
+            st.markdown(text, unsafe_allow_html=True)
+        else:
+            st.markdown(f"**🤖 Bot:** {text}")
     else:
         st.markdown(f"**🧑 You:** {text}")
 
@@ -95,7 +99,7 @@ if st.button("Send"):
         st.session_state.chat_history.append(("bot", f"Model Used: `{model_name}`"))
         st.session_state.chat_history.append(("bot", f"Processed Entities:"))
 
-        # Display NER results in a table format
+        # Display NER results in a table format and store HTML
         if processed_entities:
             # Prepare the data for the table
             table_data = [{
@@ -104,9 +108,10 @@ if st.button("Send"):
                 "Confidence (%)": f"{result['score'] * 100:.2f}"
             } for result in processed_entities]
             
-            # Create DataFrame and display it within the chat
+            # Create DataFrame and convert to HTML table
             results_table = pd.DataFrame(table_data)
-            st.session_state.chat_history.append(("bot", f"\n{results_table.to_string(index=False)}"))
+            results_table_html = results_table.to_html(index=False, escape=False)
+            st.session_state.chat_history.append(("bot", results_table_html))
         else:
             st.session_state.chat_history.append(("bot", "No entities detected."))
         
