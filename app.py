@@ -10,10 +10,10 @@ st_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 # Define model descriptions
 MODEL_CATALOG = {
-    "iiiorg/piiranha-v1-detect-personal-information": ['ACCOUNTNUM', 'BUILDINGNUM', 'CITY', 'DATEOFBIRTH','DRIVERLICENSENUM', 'EMAIL', 'GIVENNAME', 'IDCARDNUM', 'PASSWORD','SOCIALNUM', 'STREET', 'SURNAME', 'TAXNUM', 'TELEPHONENUM', 'USERNAME'],
-    "blaze999/Medical-NER": ["BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT","DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS","MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"],
+    "iiiorg/piiranha-v1-detect-personal-information": ['ACCOUNTNUM', 'BUILDINGNUM', 'CITY', 'DATEOFBIRTH', 'DRIVERLICENSENUM', 'EMAIL', 'GIVENNAME', 'IDCARDNUM', 'PASSWORD', 'SOCIALNUM', 'STREET', 'SURNAME', 'TAXNUM', 'TELEPHONENUM', 'USERNAME'],
+    "blaze999/Medical-NER": ["BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT", "DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS", "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"],
     "obi/deid_roberta_i2b2": ["staff", "HOSP", "AGE"],
-    "lakshyakh93/deberta_finetuned_pii":["JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS","ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6","CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD","PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE","LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV","NEARBYGPSCOORDINATE", "SEXTYPE"]
+    "lakshyakh93/deberta_finetuned_pii": ["JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS", "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6", "CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD", "PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE", "LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV", "NEARBYGPSCOORDINATE", "SEXTYPE"]
 }
 
 # Function to select the most relevant model based on the user query
@@ -93,19 +93,22 @@ if st.button("Send"):
         # Add messages to chat history
         st.session_state.chat_history.append(("user", user_query))
         st.session_state.chat_history.append(("bot", f"Model Used: `{model_name}`"))
-        st.session_state.chat_history.append(("bot", f"Processed Entities: {processed_entities}"))
-        
+        st.session_state.chat_history.append(("bot", f"Processed Entities:"))
+
         # Display NER results in a table format
         if processed_entities:
+            # Prepare the data for the table
             table_data = [{
                 "Entity": result['word'],
                 "Entity Type": result['entity'].split("-")[-1],
                 "Confidence (%)": f"{result['score'] * 100:.2f}"
             } for result in processed_entities]
+            
+            # Create DataFrame and display it within the chat
             results_table = pd.DataFrame(table_data)
-            st.table(results_table)
+            st.session_state.chat_history.append(("bot", f"\n{results_table.to_string(index=False)}"))
         else:
-            st.write("No entities detected.")
+            st.session_state.chat_history.append(("bot", "No entities detected."))
         
         # Refresh UI
         st.rerun()
