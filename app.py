@@ -1,78 +1,58 @@
-import React, { useState } from "react";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { motion } from "framer-motion";
-import { TextareaAutosize } from "@mui/material";
+import streamlit as st
+from transformers import pipeline
+from sentence_transformers import SentenceTransformer, util
+import torch
 
-const SmartNERChatbot = () => {
-  const [query, setQuery] = useState("");
-  const [text, setText] = useState("");
-  const [response, setResponse] = useState(null);
-  const [loading, setLoading] = useState(false);
+# Load Sentence Transformer model
+st_model = SentenceTransformer("all-MiniLM-L6-v2")
 
-  const handleExtract = async () => {
-    setLoading(true);
-    setResponse(null);
+# Define model descriptions
+MODEL_CATALOG = {
+    "blaze999/Financial-NER": ["credit card", "bank account", "payment details", "finance"],
+    "blaze999/Medical-NER": ["patient records", "diagnosis", "ICD-10", "medical history", "prescription"],
+    "blaze999/General-NER": ["personal data", "identities", "names", "phone numbers", "addresses"]
+}
 
-    try {
-      const llmResponse = await fetch("/api/llm-handler", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
-      });
-      
-      const config = await llmResponse.json(); // Smart model configuration
-      
-      const nerResponse = await fetch("/api/extract-entities", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, config }),
-      });
-      
-      const result = await nerResponse.json();
-      setResponse(result);
-    } catch (error) {
-      console.error("Error:", error);
-    }
+def select_model(user_query):
+    """
+    Select the best model based on semantic similarity using Sentence Transformers.
+    """
+    config = {"model": None}
+    query_embedding = st_model.encode(user_query, convert_to_tensor=True)
+    best_model, best_score = None, -1
 
-    setLoading(false);
-  };
+    for model, descriptions in MODEL_CATALOG.items():
+        desc_embeddings = st_model.encode(descriptions, convert_to_tensor=True)
+        score = util.pytorch_cos_sim(query_embedding, desc_embeddings).max().item()
+        if score > best_score:
+            best_model, best_score = model, score
 
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-2xl mx-auto p-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl font-bold text-center">Smart AI NER Chatbot</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <label className="font-semibold">Describe what you need:</label>
-          <Textarea
-            placeholder="e.g., 'Find all personal data excluding names'"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="mt-2 w-full"
-          />
-          <label className="font-semibold mt-4 block">Enter text for analysis:</label>
-          <TextareaAutosize
-            minRows={5}
-            placeholder="Paste or type text here..."
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            className="mt-2 w-full border rounded p-2"
-          />
-          <Button onClick={handleExtract} disabled={loading} className="mt-4 w-full">
-            {loading ? "Processing..." : "Extract Entities"}
-          </Button>
-          {response && (
-            <div className="mt-4 bg-gray-100 p-4 rounded">
-              <pre className="whitespace-pre-wrap text-sm">{JSON.stringify(response, null, 2)}</pre>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
-};
+    config["model"] = best_model
+    return config
 
-export default SmartNERChatbot;
+def run_ner_analysis(user_query, user_text):
+    """Run NER model based on selected configuration."""
+    config = select_model(user_query)
+    model_name = config.get("model", "blaze999/General-NER")
+    
+    ner_pipeline = pipeline("ner", model=model_name)
+    results = ner_pipeline(user_text)
+    return results, model_name
+
+# Streamlit UI
+st.title("🤖 Smart AI NER Chatbot")
+st.subheader("Detect Personal, Financial, and Medical Data Intelligently")
+
+# User input fields
+user_query = st.text_input("Describe what you need (e.g., 'Find all personal data'):")
+user_text = st.text_area("Enter text for analysis:")
+
+if st.button("Analyze"):
+    if user_query and user_text:
+        with st.spinner("Analyzing text..."):
+            extracted_entities, selected_model = run_ner_analysis(user_query, user_text)
+        
+        st.success(f"Model Used: `{selected_model}`")
+        st.json(extracted_entities)
+    else:
+        st.warning("Please enter both a query and text for analysis.")
