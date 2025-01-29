@@ -8,10 +8,36 @@ st_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 # Define model descriptions
 MODEL_CATALOG = {
-    "blaze999/Financial-NER": ["credit card", "bank account", "payment details", "finance"],
-    "blaze999/Medical-NER": ["patient records", "diagnosis", "ICD-10", "medical history", "prescription"],
-    "blaze999/General-NER": ["personal data", "identities", "names", "phone numbers", "addresses"]
+    "iiiorg/piiranha-v1-detect-personal-information": ['ACCOUNTNUM', 'BUILDINGNUM', 'CITY', 'DATEOFBIRTH','DRIVERLICENSENUM', 'EMAIL', 'GIVENNAME', 'IDCARDNUM', 'PASSWORD','SOCIALNUM', 'STREET', 'SURNAME', 'TAXNUM', 'TELEPHONENUM', 'USERNAME'],
+    "blaze999/Medical-NER": ["BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT","DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS","MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"],
+    "obi/deid_roberta_i2b2": ["staff", "HOSP", "AGE"],
+    "lakshyakh93/deberta_finetuned_pii":["JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS","ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6","CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD","PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE","LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV","NEARBYGPSCOORDINATE", "SEXTYPE"]
 }
+
+models = {
+    "PII": "iiiorg/piiranha-v1-detect-personal-information",
+    "PCI": "lakshyakh93/deberta_finetuned_pii",
+    "PHI": "obi/deid_roberta_i2b2",
+    "Medical NER": "blaze999/Medical-NER"
+}
+
+# Accepted labels for each model
+accepted_labels = {
+    "PII": {'ACCOUNTNUM', 'BUILDINGNUM', 'CITY', 'DATEOFBIRTH',
+            'DRIVERLICENSENUM', 'EMAIL', 'GIVENNAME', 'IDCARDNUM', 'PASSWORD',
+            'SOCIALNUM', 'STREET', 'SURNAME', 'TAXNUM', 'TELEPHONENUM', 'USERNAME'},
+    "PCI": {"JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
+            "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6",
+            "CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD",
+            "PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE",
+            "LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV",
+            "NEARBYGPSCOORDINATE", "SEXTYPE"},
+    "PHI": {"staff", "HOSP", "AGE"},
+    "Medical": {"BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT",
+                "DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS",
+                "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"}
+}
+
 
 def select_model(user_query):
     """
