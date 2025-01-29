@@ -19,13 +19,23 @@ MODEL_CATALOG = {
 def select_model(user_query):
     query_embedding = st_model.encode(user_query, convert_to_tensor=True)
     best_model, best_score = None, -1
-    
+
+    # Check for specific keywords in the query
+    pii_keywords = ["personal", "PII", "financial", "medical", "phone", "email", "address"]
+    medical_keywords = ["medical", "disease", "disorder", "medication", "clinical"]
+
+    if any(keyword in user_query.lower() for keyword in pii_keywords):
+        return "iiiorg/piiranha-v1-detect-personal-information"
+    elif any(keyword in user_query.lower() for keyword in medical_keywords):
+        return "blaze999/Medical-NER"
+
+    # If no specific keywords, fallback to semantic similarity
     for model, descriptions in MODEL_CATALOG.items():
         desc_embeddings = st_model.encode(descriptions, convert_to_tensor=True)
         score = util.pytorch_cos_sim(query_embedding, desc_embeddings).max().item()
         if score > best_score:
             best_model, best_score = model, score
-    
+
     return best_model
 
 # Function to process complex queries
@@ -61,6 +71,7 @@ user_text = st.text_area("Paste your text here:")
 if st.button("Send"):
     if user_query and user_text:
         with st.spinner("Processing..."):
+            # Select the right model based on the query
             model_name = select_model(user_query)
             ner_pipeline = pipeline("ner", model=model_name)
             extracted_entities = ner_pipeline(user_text)
