@@ -1,81 +1,51 @@
 import streamlit as st
-from transformers import pipeline
-from sentence_transformers import SentenceTransformer, util
+from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
+from sentence_transformers import SentenceTransformer
 import torch
+import json
 
-# Load Sentence Transformer model
+# Load Sentence Transformer model for semantic search
 st_model = SentenceTransformer("all-MiniLM-L6-v2")
 
-# Define model descriptions
-MODEL_CATALOG = {
-    "iiiorg/piiranha-v1-detect-personal-information": ['ACCOUNTNUM', 'BUILDINGNUM', 'CITY', 'DATEOFBIRTH','DRIVERLICENSENUM', 'EMAIL', 'GIVENNAME', 'IDCARDNUM', 'PASSWORD','SOCIALNUM', 'STREET', 'SURNAME', 'TAXNUM', 'TELEPHONENUM', 'USERNAME'],
-    "blaze999/Medical-NER": ["BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT","DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS","MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"],
-    "obi/deid_roberta_i2b2": ["staff", "HOSP", "AGE"],
-    "lakshyakh93/deberta_finetuned_pii":["JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS","ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6","CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD","PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE","LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV","NEARBYGPSCOORDINATE", "SEXTYPE"]
-}
+# Load GPT-Neo model from Hugging Face
+model_name = "EleutherAI/gpt-neo-2.7B"  # You can use other available models as well
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name)
 
-# Accepted labels for different categories
-accepted_labels = {
-    "PII": {'ACCOUNTNUM', 'BUILDINGNUM', 'CITY', 'DATEOFBIRTH',
-            'DRIVERLICENSENUM', 'EMAIL', 'GIVENNAME', 'IDCARDNUM', 'PASSWORD',
-            'SOCIALNUM', 'STREET', 'SURNAME', 'TAXNUM', 'TELEPHONENUM', 'USERNAME'},
-    "PCI": {"JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
-            "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6",
-            "CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD",
-            "PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE",
-            "LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV",
-            "NEARBYGPSCOORDINATE", "SEXTYPE"},
-    "PHI": {"staff", "HOSP", "AGE"},
-    "Medical": {"BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT",
-                "DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS",
-                "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"}
-}
+# Function to process the query using GPT-Neo and return a JSON-like structure
+def query_gpt_neo_for_model_selection(user_query):
+    input_text = f"Given the following query, suggest the models to use for NER extraction and any specific entities to focus on. Return a JSON with 'selected_model' and 'enabled_entities'. Query: {user_query}"
+    
+    # Tokenize input and generate a response
+    inputs = tokenizer(input_text, return_tensors="pt")
+    outputs = model.generate(inputs['input_ids'], max_length=150, num_return_sequences=1)
+    decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    
+    # Parse the response to extract JSON-like structure
+    try:
+        start_index = decoded_output.find('{')
+        end_index = decoded_output.rfind('}') + 1
+        json_output = decoded_output[start_index:end_index]
+        return json.loads(json_output)
+    except Exception as e:
+        print("Error parsing GPT-Neo response:", e)
+        return {}
 
-# Function to select the most relevant model based on the user query
-def select_model(user_query):
-    query_embedding = st_model.encode(user_query, convert_to_tensor=True)
-    best_model, best_score = None, -1
+# Function to process extracted entities based on the LLM response
+def handle_entities_based_on_response(user_query, extracted_entities, model_response):
+    enabled_entities = model_response.get("enabled_entities", [])
+    return [ent for ent in extracted_entities if ent['entity'] in enabled_entities]
 
-    # Directly map specific keywords to models
-    if "pii" in user_query.lower():
-        return "lakshyakh93/deberta_finetuned_pii"
-    elif "pci" in user_query.lower():
-        # For PCI-related queries, you can add a specific model for PCI if available
-        return "iiiorg/piiranha-v1-detect-personal-information"  # Replace with PCI model if needed
-    elif "medical" in user_query.lower():
-        return "blaze999/Medical-NER"
-
-    # Otherwise, fall back to semantic similarity
-    for model, descriptions in MODEL_CATALOG.items():
-        desc_embeddings = st_model.encode(descriptions, convert_to_tensor=True)
-        score = util.pytorch_cos_sim(query_embedding, desc_embeddings).max().item()
-        if score > best_score:
-            best_model, best_score = model, score
-
-    return best_model
-
-# Function to filter and classify extracted entities into relevant categories
-def classify_entities(entities):
-    classified_entities = {"PII": [], "PCI": [], "PHI": [], "Medical": []}
-
-    for entity in entities:
-        entity_label = entity['entity']
-        for category, labels in accepted_labels.items():
-            if entity_label in labels:
-                classified_entities[category].append(entity)
-
-    return classified_entities
-
-# Function to process complex queries (e.g., "find PII excluding names")
-def handle_complex_queries(user_query, classified_entities):
+# Function to process complex queries
+def handle_complex_queries(user_query, extracted_entities, model_response):
     if "last names" in user_query.lower():
-        return classified_entities["PII"], classified_entities["PHI"]
-    elif "PII excluding names" in user_query.lower():
-        return classified_entities["PII"]
-    elif "all" in user_query.lower():
-        return classified_entities
+        return [ent for ent in extracted_entities if ent['entity'] in ['SURNAME']]
+    elif "PII entries excluding names" in user_query.lower():
+        return [ent for ent in extracted_entities if ent['entity'] not in ['GIVENNAME', 'SURNAME']]
+    elif "PII and PCI entries" in user_query.lower():
+        return [ent for ent in extracted_entities if ent['entity'] in model_response.get("enabled_entities", [])]
     else:
-        return classified_entities
+        return extracted_entities
 
 # Interactive chatbot-style UI
 st.title("💬 AI NER Chatbot")
@@ -99,21 +69,31 @@ user_text = st.text_area("Paste your text here:")
 if st.button("Send"):
     if user_query and user_text:
         with st.spinner("Processing..."):
-            # Select the right model based on the query
-            model_name = select_model(user_query)
-            ner_pipeline = pipeline("ner", model=model_name)
-            extracted_entities = ner_pipeline(user_text)
-
-            # Classify extracted entities into categories
-            classified_entities = classify_entities(extracted_entities)
-
-            # Handle complex queries
-            filtered_entities = handle_complex_queries(user_query, classified_entities)
-        
-        # Add messages to chat history
-        st.session_state.chat_history.append(("user", user_query))
-        st.session_state.chat_history.append(("bot", f"Model Used: `{model_name}`"))
-        st.session_state.chat_history.append(("bot", f"Extracted Entities: {filtered_entities}"))
+            # Step 1: Query GPT-Neo for model and configuration suggestions
+            model_response = query_gpt_neo_for_model_selection(user_query)
+            
+            # Step 2: Select the right model based on the GPT-Neo response
+            if model_response:
+                model_name = model_response.get("selected_model", "iiiorg/piiranha-v1-detect-personal-information")  # Default to a PII model
+                enabled_entities = model_response.get("enabled_entities", [])
+                
+                # Run the NER pipeline for the selected model
+                ner_pipeline = pipeline("ner", model=model_name)
+                extracted_entities = ner_pipeline(user_text)
+                
+                # Filter entities based on the LLM's response
+                filtered_entities = handle_entities_based_on_response(user_query, extracted_entities, model_response)
+                
+                # Process complex queries for additional filtering
+                final_entities = handle_complex_queries(user_query, filtered_entities, model_response)
+                
+                # Add messages to chat history
+                st.session_state.chat_history.append(("user", user_query))
+                st.session_state.chat_history.append(("bot", f"Model Used: `{model_name}`"))
+                st.session_state.chat_history.append(("bot", f"Extracted Entities: {final_entities}"))
+            
+            else:
+                st.warning("Error in processing the query with the model response.")
         
         # Refresh UI
         st.rerun()
