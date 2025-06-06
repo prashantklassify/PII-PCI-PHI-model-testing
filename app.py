@@ -1,14 +1,54 @@
 import streamlit as st
 from transformers import pipeline
 import pandas as pd
+from functools import lru_cache
 
-# Load the models for NER and classification
-models = {
-    "PII": "iiiorg/piiranha-v1-detect-personal-information",
-    "PCI": "lakshyakh93/deberta_finetuned_pii",
-    "PHI": "obi/deid_roberta_i2b2",
-    "Medical NER": "blaze999/Medical-NER"
-}
+# Configure the app
+st.set_page_config(page_title="Document Classification and NER", layout="wide")
+
+# Display app title
+st.title("Document Classification and NER")
+
+# Add a warning about initial load time
+with st.expander("ℹ️ Important Note"):
+    st.write("""
+    - The first run will take longer as models download (up to 5 minutes)
+    - Subsequent runs will be faster due to caching
+    - Large documents may take time to process
+    """)
+
+# Load models with caching and error handling
+@st.cache_resource(show_spinner="Loading PII model...")
+def load_pii_model():
+    try:
+        return pipeline("token-classification", model="iiiorg/piiranha-v1-detect-personal-information", device="cpu")
+    except Exception as e:
+        st.error(f"Failed to load PII model: {str(e)}")
+        return None
+
+@st.cache_resource(show_spinner="Loading PCI model...")
+def load_pci_model():
+    try:
+        return pipeline("token-classification", model="lakshyakh93/deberta_finetuned_pii", device="cpu")
+    except Exception as e:
+        st.error(f"Failed to load PCI model: {str(e)}")
+        return None
+
+@st.cache_resource(show_spinner="Loading PHI model...")
+def load_phi_model():
+    try:
+        return pipeline("token-classification", model="obi/deid_roberta_i2b2", device="cpu")
+    except Exception as e:
+        st.error(f"Failed to load PHI model: {str(e)}")
+        return None
+
+@st.cache_resource(show_spinner="Loading Medical NER model...")
+def load_medical_model():
+    try:
+        return pipeline("token-classification", model="blaze999/Medical-NER", device="cpu")
+    except Exception as e:
+        st.error(f"Failed to load Medical NER model: {str(e)}")
+        return None
 
 # Accepted labels for each model
 accepted_labels = {
@@ -27,18 +67,25 @@ accepted_labels = {
                 "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"}
 }
 
-# Load models
-model_pii = pipeline("token-classification", model=models["PII"])
-model_pci = pipeline("token-classification", model=models["PCI"])
-model_phi = pipeline("token-classification", model=models["PHI"])
-model_medical = pipeline("token-classification", model=models["Medical NER"])
+# Load models with progress indicators
+with st.spinner("Loading models (this may take a few minutes)..."):
+    model_pii = load_pii_model()
+    model_pci = load_pci_model()
+    model_phi = load_phi_model()
+    model_medical = load_medical_model()
+
+# Check if all models loaded successfully
+if None in [model_pii, model_pci, model_phi, model_medical]:
+    st.error("One or more models failed to load. Please check the error messages above.")
+    st.stop()
 
 # Threshold sliders
+st.sidebar.header("Model Thresholds")
 thresholds = {
-    "PII": st.slider("Confidence Threshold for PII Model", 0.0, 1.0, 0.75, 0.05),
-    "PCI": st.slider("Confidence Threshold for PCI Model", 0.0, 1.0, 0.75, 0.05),
-    "PHI": st.slider("Confidence Threshold for PHI Model", 0.0, 1.0, 0.75, 0.05),
-    "Medical": st.slider("Confidence Threshold for Medical NER Model", 0.0, 1.0, 0.75, 0.05),
+    "PII": st.sidebar.slider("Confidence Threshold for PII Model", 0.0, 1.0, 0.75, 0.05),
+    "PCI": st.sidebar.slider("Confidence Threshold for PCI Model", 0.0, 1.0, 0.75, 0.05),
+    "PHI": st.sidebar.slider("Confidence Threshold for PHI Model", 0.0, 1.0, 0.75, 0.05),
+    "Medical": st.sidebar.slider("Confidence Threshold for Medical NER Model", 0.0, 1.0, 0.75, 0.05),
 }
 
 # Function to clean and merge tokens
@@ -70,11 +117,14 @@ def resolve_conflicts(entities):
 def custom_pipeline(text):
     results = []
     for model_name, model in [("PII", model_pii), ("PCI", model_pci), ("PHI", model_phi), ("Medical", model_medical)]:
-        model_results = model(text)
-        model_results = clean_and_merge_tokens(model_results, thresholds[model_name], accepted_labels[model_name])
-        for res in model_results:
-            res["entity"] = model_name
-        results.extend(model_results)
+        try:
+            model_results = model(text)
+            model_results = clean_and_merge_tokens(model_results, thresholds[model_name], accepted_labels[model_name])
+            for res in model_results:
+                res["entity"] = model_name
+            results.extend(model_results)
+        except Exception as e:
+            st.warning(f"Error processing text with {model_name} model: {str(e)}")
     return resolve_conflicts(results)
 
 # Highlight text with colors
@@ -94,7 +144,7 @@ def highlight_text(text, entities):
         category = entity['entity']
         color = colors.get(category, "#FFFFFF")  # Default to white
         highlighted_text += text[current_pos:entity['start']]
-        highlighted_text += f"<span style='background-color:{color}'>{text[entity['start']:entity['end']]}</span>"
+        highlighted_text += f"<span style='background-color:{color}' title='{category} ({entity['score']:.2f})'>{text[entity['start']:entity['end']]}</span>"
         current_pos = entity['end']
     highlighted_text += text[current_pos:]
     return highlighted_text
@@ -102,6 +152,9 @@ def highlight_text(text, entities):
 # Categorize tokens
 def categorize_tokens(text, entities):
     total_tokens = len(text.split())
+    if total_tokens == 0:
+        return {}
+    
     categories = {"PII": 0, "PCI": 0, "PHI": 0, "Others": 0}
 
     covered_positions = set()
@@ -116,35 +169,44 @@ def categorize_tokens(text, entities):
     percentages = {key: (count / total_tokens) * 100 for key, count in categories.items()}
     return percentages
 
-# Streamlit App layout
-st.title("Document Classification and NER")
-
-input_text = st.text_area("Enter text for classification and NER:")
+# Main app interface
+input_text = st.text_area("Enter text for classification and NER:", height=200)
 
 if st.button("Classify and Extract Entities"):
-    if input_text:
-        ner_results = custom_pipeline(input_text)
+    if not input_text.strip():
+        st.warning("Please enter some text for classification and NER.")
+        st.stop()
         
-        st.subheader("Highlighted Text with Entities:")
-        highlighted_html = highlight_text(input_text, ner_results)
-        st.markdown(highlighted_html, unsafe_allow_html=True)
+    with st.spinner("Processing text..."):
+        try:
+            ner_results = custom_pipeline(input_text)
+            
+            st.subheader("Highlighted Text with Entities:")
+            highlighted_html = highlight_text(input_text, ner_results)
+            st.markdown(highlighted_html, unsafe_allow_html=True)
 
-        st.subheader("Extracted Entities:")
-        if ner_results:
-            table_data = [{
-                "Entity": entity['word'],
-                "Entity Type": entity['entity'],
-                "Start": entity['start'],
-                "End": entity['end'],
-                "Confidence (%)": f"{entity['score'] * 100:.2f}"
-            } for entity in ner_results]
-            st.table(pd.DataFrame(table_data))
-        else:
-            st.write("No entities detected.")
+            st.subheader("Extracted Entities:")
+            if ner_results:
+                table_data = [{
+                    "Entity": entity['word'],
+                    "Entity Type": entity['entity'],
+                    "Start": entity['start'],
+                    "End": entity['end'],
+                    "Confidence (%)": f"{entity['score'] * 100:.2f}"
+                } for entity in ner_results]
+                st.dataframe(pd.DataFrame(table_data), use_container_width=True)
+            else:
+                st.info("No entities detected above the confidence thresholds.")
 
-        st.subheader("Category Percentages:")
-        percentages = categorize_tokens(input_text, ner_results)
-        for category, percentage in percentages.items():
-            st.write(f"{category}: {percentage:.2f}%")
-    else:
-        st.write("Please enter some text for classification and NER.")
+            st.subheader("Category Percentages:")
+            percentages = categorize_tokens(input_text, ner_results)
+            if percentages:
+                df = pd.DataFrame.from_dict(percentages, orient='index', columns=['Percentage'])
+                df['Percentage'] = df['Percentage'].round(2)
+                st.bar_chart(df)
+                st.table(df)
+            else:
+                st.info("No categorization data available.")
+                
+        except Exception as e:
+            st.error(f"An error occurred during processing: {str(e)}")
