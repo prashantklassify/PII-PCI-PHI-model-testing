@@ -2,6 +2,7 @@ import streamlit as st
 from transformers import pipeline
 import pandas as pd
 from functools import lru_cache
+import torch
 
 # Configure the app
 st.set_page_config(page_title="Document Classification and NER", layout="wide")
@@ -16,39 +17,6 @@ with st.expander("ℹ️ Important Note"):
     - Subsequent runs will be faster due to caching
     - Large documents may take time to process
     """)
-
-# Load models with caching and error handling
-@st.cache_resource(show_spinner="Loading PII model...")
-def load_pii_model():
-    try:
-        return pipeline("token-classification", model="iiiorg/piiranha-v1-detect-personal-information", device="cpu")
-    except Exception as e:
-        st.error(f"Failed to load PII model: {str(e)}")
-        return None
-
-@st.cache_resource(show_spinner="Loading PCI model...")
-def load_pci_model():
-    try:
-        return pipeline("token-classification", model="lakshyakh93/deberta_finetuned_pii", device="cpu")
-    except Exception as e:
-        st.error(f"Failed to load PCI model: {str(e)}")
-        return None
-
-@st.cache_resource(show_spinner="Loading PHI model...")
-def load_phi_model():
-    try:
-        return pipeline("token-classification", model="obi/deid_roberta_i2b2", device="cpu")
-    except Exception as e:
-        st.error(f"Failed to load PHI model: {str(e)}")
-        return None
-
-@st.cache_resource(show_spinner="Loading Medical NER model...")
-def load_medical_model():
-    try:
-        return pipeline("token-classification", model="blaze999/Medical-NER", device="cpu")
-    except Exception as e:
-        st.error(f"Failed to load Medical NER model: {str(e)}")
-        return None
 
 # Accepted labels for each model
 accepted_labels = {
@@ -66,6 +34,77 @@ accepted_labels = {
                 "DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS",
                 "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"}
 }
+
+# Load models with caching and proper device handling
+@st.cache_resource(show_spinner="Loading PII model...")
+def load_pii_model():
+    try:
+        # First try loading with default settings
+        return pipeline("token-classification", 
+                       model="iiiorg/piiranha-v1-detect-personal-information",
+                       device="cpu")
+    except Exception as e:
+        st.error(f"Failed to load PII model with default settings: {str(e)}")
+        try:
+            # Try loading with low_cpu_mem_usage=True
+            return pipeline("token-classification", 
+                          model="iiiorg/piiranha-v1-detect-personal-information",
+                          device="cpu",
+                          low_cpu_mem_usage=True)
+        except Exception as e:
+            st.error(f"Failed to load PII model with low_cpu_mem_usage: {str(e)}")
+            return None
+
+@st.cache_resource(show_spinner="Loading PCI model...")
+def load_pci_model():
+    try:
+        return pipeline("token-classification", 
+                      model="lakshyakh93/deberta_finetuned_pii",
+                      device="cpu")
+    except Exception as e:
+        st.error(f"Failed to load PCI model with default settings: {str(e)}")
+        try:
+            return pipeline("token-classification", 
+                          model="lakshyakh93/deberta_finetuned_pii",
+                          device="cpu",
+                          low_cpu_mem_usage=True)
+        except Exception as e:
+            st.error(f"Failed to load PCI model with low_cpu_mem_usage: {str(e)}")
+            return None
+
+@st.cache_resource(show_spinner="Loading PHI model...")
+def load_phi_model():
+    try:
+        return pipeline("token-classification", 
+                      model="obi/deid_roberta_i2b2",
+                      device="cpu")
+    except Exception as e:
+        st.error(f"Failed to load PHI model with default settings: {str(e)}")
+        try:
+            return pipeline("token-classification", 
+                          model="obi/deid_roberta_i2b2",
+                          device="cpu",
+                          low_cpu_mem_usage=True)
+        except Exception as e:
+            st.error(f"Failed to load PHI model with low_cpu_mem_usage: {str(e)}")
+            return None
+
+@st.cache_resource(show_spinner="Loading Medical NER model...")
+def load_medical_model():
+    try:
+        return pipeline("token-classification", 
+                      model="blaze999/Medical-NER",
+                      device="cpu")
+    except Exception as e:
+        st.error(f"Failed to load Medical NER model with default settings: {str(e)}")
+        try:
+            return pipeline("token-classification", 
+                          model="blaze999/Medical-NER",
+                          device="cpu",
+                          low_cpu_mem_usage=True)
+        except Exception as e:
+            st.error(f"Failed to load Medical NER model with low_cpu_mem_usage: {str(e)}")
+            return None
 
 # Load models with progress indicators
 with st.spinner("Loading models (this may take a few minutes)..."):
