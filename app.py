@@ -1,101 +1,170 @@
 import streamlit as st
-from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
-from sentence_transformers import SentenceTransformer
-import torch
-import json
+from transformers import pipeline
+import pandas as pd
 
-# Load Sentence Transformer model for semantic search
-st_model = SentenceTransformer("all-MiniLM-L6-v2")
+# Load the models for NER and classification
+models = {
+    "PII": "iiiorg/piiranha-v1-detect-personal-information",
+    "PCI": "lakshyakh93/deberta_finetuned_pii",
+    "PHI": "obi/deid_roberta_i2b2",
+    "Medical NER": "blaze999/Medical-NER"
+}
 
-# Load GPT-Neo model from Hugging Face
-model_name = "EleutherAI/gpt-neo-2.7B"  # You can use other available models as well
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(model_name)
+# Accepted labels for each model
+accepted_labels = {
+    "PII": {'ACCOUNTNUM', 'BUILDINGNUM', 'CITY', 'CREDITCARDNUMBER', 'DATEOFBIRTH',
+            'DRIVERLICENSENUM', 'EMAIL', 'GIVENNAME', 'IDCARDNUM', 'PASSWORD',
+            'SOCIALNUM', 'STREET', 'SURNAME', 'TAXNUM', 'TELEPHONENUM', 'USERNAME'},
+    "PCI": {"JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
+            "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6",
+            "CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD",
+            "PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE",
+            "LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV",
+            "NEARBYGPSCOORDINATE", "SEXTYPE"},
+    "PHI": {"staff", "HOSP", "AGE"},
+    "Medical": {"BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT",
+                "DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS",
+                "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"}
+}
 
-# Function to process the query using GPT-Neo and return a JSON-like structure
-def query_gpt_neo_for_model_selection(user_query):
-    input_text = f"Given the following query, suggest the models to use for NER extraction and any specific entities to focus on. Return a JSON with 'selected_model' and 'enabled_entities'. Query: {user_query}"
-    
-    # Tokenize input and generate a response
-    inputs = tokenizer(input_text, return_tensors="pt")
-    outputs = model.generate(inputs['input_ids'], max_length=150, num_return_sequences=1)
-    decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    
-    # Parse the response to extract JSON-like structure
-    try:
-        start_index = decoded_output.find('{')
-        end_index = decoded_output.rfind('}') + 1
-        json_output = decoded_output[start_index:end_index]
-        return json.loads(json_output)
-    except Exception as e:
-        print("Error parsing GPT-Neo response:", e)
-        return {}
+# Load models
+model_pii = pipeline("token-classification", model=models["PII"])
+model_pci = pipeline("token-classification", model=models["PCI"])
+model_phi = pipeline("token-classification", model=models["PHI"])
+model_medical = pipeline("token-classification", model=models["Medical NER"])
 
-# Function to process extracted entities based on the LLM response
-def handle_entities_based_on_response(user_query, extracted_entities, model_response):
-    enabled_entities = model_response.get("enabled_entities", [])
-    return [ent for ent in extracted_entities if ent['entity'] in enabled_entities]
+# Threshold sliders
+thresholds = {
+    "PII": st.slider("Confidence Threshold for PII Model", 0.0, 1.0, 0.75, 0.05),
+    "PCI": st.slider("Confidence Threshold for PCI Model", 0.0, 1.0, 0.75, 0.05),
+    "PHI": st.slider("Confidence Threshold for PHI Model", 0.0, 1.0, 0.75, 0.05),
+    "Medical": st.slider("Confidence Threshold for Medical NER Model", 0.0, 1.0, 0.75, 0.05),
+}
 
-# Function to process complex queries
-def handle_complex_queries(user_query, extracted_entities, model_response):
-    if "last names" in user_query.lower():
-        return [ent for ent in extracted_entities if ent['entity'] in ['SURNAME']]
-    elif "PII entries excluding names" in user_query.lower():
-        return [ent for ent in extracted_entities if ent['entity'] not in ['GIVENNAME', 'SURNAME']]
-    elif "PII and PCI entries" in user_query.lower():
-        return [ent for ent in extracted_entities if ent['entity'] in model_response.get("enabled_entities", [])]
+# Function to clean and merge tokens
+def clean_and_merge_tokens(entities, threshold, accepted_labels):
+    cleaned_entities = []
+    for entity in entities:
+        if entity['score'] < threshold or entity['entity'].split("-")[-1] not in accepted_labels:
+            continue
+        token = entity['word'].replace("▁", "").replace("Ġ", "")
+        entity['word'] = token
+        if cleaned_entities and cleaned_entities[-1]['entity'] == entity['entity'] and cleaned_entities[-1]['end'] == entity['start']:
+            cleaned_entities[-1]['word'] += token
+            cleaned_entities[-1]['end'] = entity['end']
+            cleaned_entities[-1]['score'] = max(cleaned_entities[-1]['score'], entity['score'])
+        else:
+            cleaned_entities.append(entity)
+    return cleaned_entities
+
+# Resolve token conflicts by confidence
+def resolve_conflicts(entities):
+    resolved = {}
+    for entity in entities:
+        span = (entity['start'], entity['end'])
+        if span not in resolved or resolved[span]['score'] < entity['score']:
+            resolved[span] = entity
+    return list(resolved.values())
+
+# Normalize scores to avoid discrepancies
+def normalize_scores(entities):
+    max_score = max(entity['score'] for entity in entities) if entities else 1.0
+    for entity in entities:
+        entity['score'] /= max_score
+    return entities
+
+# Filter overlapping entities
+def filter_overlaps(entities):
+    sorted_entities = sorted(entities, key=lambda x: (x['start'], -x['end']))
+    filtered = []
+    for entity in sorted_entities:
+        if not filtered or filtered[-1]['end'] <= entity['start']:
+            filtered.append(entity)
+    return filtered
+
+# Custom pipeline function
+def custom_pipeline(text):
+    results = []
+    for model_name, model in [
+        ("PII", model_pii), ("PCI", model_pci), ("PHI", model_phi), ("Medical", model_medical)
+    ]:
+        model_results = model(text)
+        model_results = clean_and_merge_tokens(model_results, thresholds[model_name], accepted_labels[model_name])
+        model_results = normalize_scores(model_results)
+        model_results = filter_overlaps(model_results)
+        for res in model_results:
+            res["entity"] = model_name
+        results.extend(model_results)
+    return resolve_conflicts(results)
+
+# Highlight text with colors
+def highlight_text(text, entities):
+    colors = {
+        "PII": "#FFA07A",  # Light Salmon
+        "PCI": "#ADD8E6",  # Light Blue
+        "PHI": "#FFD700",  # Gold (shared with Medical)
+        "Medical": "#FFD700"  # Gold
+    }
+    highlighted_text = ""
+    current_pos = 0
+
+    # Sort entities by start position
+    entities = sorted(entities, key=lambda x: x['start'])
+    for entity in entities:
+        category = entity['entity']
+        color = colors.get(category, "#FFFFFF")  # Default to white
+        highlighted_text += text[current_pos:entity['start']]
+        highlighted_text += f"<span style='background-color:{color}'>{text[entity['start']:entity['end']]}</span>"
+        current_pos = entity['end']
+    highlighted_text += text[current_pos:]
+    return highlighted_text
+
+# Categorize tokens
+def categorize_tokens(text, entities):
+    total_tokens = len(text.split())
+    categories = {"PII": 0, "PCI": 0, "PHI": 0, "Others": 0}
+
+    covered_positions = set()
+    for entity in entities:
+        category = "PHI" if entity['entity'] in ["PHI", "Medical"] else entity['entity']
+        categories[category] += len(text[entity['start']:entity['end']].split())
+        covered_positions.update(range(entity['start'], entity['end']))
+
+    uncovered_tokens = [word for i, word in enumerate(text.split()) if i not in covered_positions]
+    categories["Others"] += len(uncovered_tokens)
+
+    percentages = {key: (count / total_tokens) * 100 for key, count in categories.items()}
+    return percentages
+
+# Streamlit App layout
+st.title("Document Classification and NER")
+
+input_text = st.text_area("Enter text for classification and NER:")
+
+if st.button("Classify and Extract Entities"):
+    if input_text:
+        ner_results = custom_pipeline(input_text)
+
+        st.subheader("Highlighted Text with Entities:")
+        highlighted_html = highlight_text(input_text, ner_results)
+        st.markdown(highlighted_html, unsafe_allow_html=True)
+
+        st.subheader("Extracted Entities:")
+        if ner_results:
+            table_data = [{
+                "Entity": entity['word'],
+                "Entity Type": entity['entity'],
+                "Start": entity['start'],
+                "End": entity['end'],
+                "Confidence (%)": f"{entity['score'] * 100:.2f}"
+            } for entity in ner_results]
+            st.table(pd.DataFrame(table_data))
+        else:
+            st.write("No entities detected.")
+
+        st.subheader("Category Percentages:")
+        percentages = categorize_tokens(input_text, ner_results)
+        for category, percentage in percentages.items():
+            st.write(f"{category}: {percentage:.2f}%")
     else:
-        return extracted_entities
-
-# Interactive chatbot-style UI
-st.title("💬 AI NER Chatbot")
-st.markdown("### Detect Personal, Financial, and Medical Data Intelligently")
-
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-
-# Display chat history
-for message in st.session_state.chat_history:
-    role, text = message
-    if role == "bot":
-        st.markdown(f"**🤖 Bot:** {text}")
-    else:
-        st.markdown(f"**🧑 You:** {text}")
-
-# User input
-user_query = st.text_input("Ask me to analyze something:")
-user_text = st.text_area("Paste your text here:")
-
-if st.button("Send"):
-    if user_query and user_text:
-        with st.spinner("Processing..."):
-            # Step 1: Query GPT-Neo for model and configuration suggestions
-            model_response = query_gpt_neo_for_model_selection(user_query)
-            
-            # Step 2: Select the right model based on the GPT-Neo response
-            if model_response:
-                model_name = model_response.get("selected_model", "iiiorg/piiranha-v1-detect-personal-information")  # Default to a PII model
-                enabled_entities = model_response.get("enabled_entities", [])
-                
-                # Run the NER pipeline for the selected model
-                ner_pipeline = pipeline("ner", model=model_name)
-                extracted_entities = ner_pipeline(user_text)
-                
-                # Filter entities based on the LLM's response
-                filtered_entities = handle_entities_based_on_response(user_query, extracted_entities, model_response)
-                
-                # Process complex queries for additional filtering
-                final_entities = handle_complex_queries(user_query, filtered_entities, model_response)
-                
-                # Add messages to chat history
-                st.session_state.chat_history.append(("user", user_query))
-                st.session_state.chat_history.append(("bot", f"Model Used: `{model_name}`"))
-                st.session_state.chat_history.append(("bot", f"Extracted Entities: {final_entities}"))
-            
-            else:
-                st.warning("Error in processing the query with the model response.")
-        
-        # Refresh UI
-        st.rerun()
-    else:
-        st.warning("Please enter both a query and text for analysis.")
+        st.write("Please enter some text for classification and NER.")
