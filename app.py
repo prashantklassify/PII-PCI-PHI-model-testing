@@ -9,44 +9,37 @@ models = {
     "PHI": "obi/deid_roberta_i2b2",
     "Medical NER": "blaze999/Medical-NER"
 }
-
-# Accepted labels for each model
-accepted_labels = {
-    "PII": {'ACCOUNTNUM', 'BUILDINGNUM', 'CITY', 'CREDITCARDNUMBER', 'DATEOFBIRTH',
-            'DRIVERLICENSENUM', 'EMAIL', 'GIVENNAME', 'IDCARDNUM', 'PASSWORD',
-            'SOCIALNUM', 'STREET', 'SURNAME', 'TAXNUM', 'TELEPHONENUM', 'USERNAME'},
-    "PCI": {"JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
-            "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6",
-            "CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD",
-            "PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE",
-            "LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV",
-            "NEARBYGPSCOORDINATE", "SEXTYPE"},
-    "PHI": {"staff", "HOSP", "AGE"},
-    "Medical": {"BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT",
-                "DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS",
-                "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"}
+accepted_pii_labels = {'ACCOUNTNUM','BUILDINGNUM','CITY','CREDITCARDNUMBER','DATEOFBIRTH','DRIVERLICENSENUM','EMAIL','GIVENNAME','IDCARDNUM','PASSWORD','SOCIALNUM','STREET','SURNAME','TAXNUM','TELEPHONENUM','USERNAME'}
+accepted_pci_labels = {
+    "JOBDESCRIPTOR", "JOBTITLE", "JOBAREA", "BITCOINADDRESS", "ETHEREUMADDRESS",
+    "ACCOUNTNAME", "ACCOUNTNUMBER", "IBAN", "BIC", "IPV4", "IPV6",
+    "CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD",
+    "PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE",
+    "LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV",
+    "NEARBYGPSCOORDINATE", "SEXTYPE"
 }
-
-# Load models
+accepted_phi_labels = {"staff", "HOSP", "AGE"}
+accepted_medical_labels = {
+    "BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT",
+    "DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS",
+    "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"
+}
 model_pii = pipeline("token-classification", model=models["PII"])
 model_pci = pipeline("token-classification", model=models["PCI"])
 model_phi = pipeline("token-classification", model=models["PHI"])
 model_medical = pipeline("token-classification", model=models["Medical NER"])
+classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
 
-# Threshold sliders
-thresholds = {
-    "PII": st.slider("Confidence Threshold for PII Model", 0.0, 1.0, 0.75, 0.05),
-    "PCI": st.slider("Confidence Threshold for PCI Model", 0.0, 1.0, 0.75, 0.05),
-    "PHI": st.slider("Confidence Threshold for PHI Model", 0.0, 1.0, 0.75, 0.05),
-    "Medical": st.slider("Confidence Threshold for Medical NER Model", 0.0, 1.0, 0.75, 0.05),
-}
+# Define sliders for confidence thresholds
+threshold_pii = st.slider("Confidence Threshold for PII Model", 0.0, 1.0, 0.75, 0.05)
+threshold_pci = st.slider("Confidence Threshold for PCI Model", 0.0, 1.0, 0.75, 0.05)
+threshold_phi = st.slider("Confidence Threshold for PHI Model", 0.0, 1.0, 0.75, 0.05)
+threshold_medical = st.slider("Confidence Threshold for Medical NER Model", 0.0, 1.0, 0.75, 0.05)
 
 # Function to clean and merge tokens
-def clean_and_merge_tokens(entities, threshold, accepted_labels):
+def clean_and_merge_tokens(entities):
     cleaned_entities = []
     for entity in entities:
-        if entity['score'] < threshold or entity['entity'].split("-")[-1] not in accepted_labels:
-            continue
         token = entity['word'].replace("▁", "").replace("Ġ", "")
         entity['word'] = token
         if cleaned_entities and cleaned_entities[-1]['entity'] == entity['entity'] and cleaned_entities[-1]['end'] == entity['start']:
@@ -57,114 +50,76 @@ def clean_and_merge_tokens(entities, threshold, accepted_labels):
             cleaned_entities.append(entity)
     return cleaned_entities
 
-# Resolve token conflicts by confidence
-def resolve_conflicts(entities):
-    resolved = {}
-    for entity in entities:
-        span = (entity['start'], entity['end'])
-        if span not in resolved or resolved[span]['score'] < entity['score']:
-            resolved[span] = entity
-    return list(resolved.values())
-
-# Normalize scores to avoid discrepancies
-def normalize_scores(entities):
-    max_score = max(entity['score'] for entity in entities) if entities else 1.0
-    for entity in entities:
-        entity['score'] /= max_score
-    return entities
-
-# Filter overlapping entities
-def filter_overlaps(entities):
-    sorted_entities = sorted(entities, key=lambda x: (x['start'], -x['end']))
-    filtered = []
-    for entity in sorted_entities:
-        if not filtered or filtered[-1]['end'] <= entity['start']:
-            filtered.append(entity)
-    return filtered
-
-# Custom pipeline function
+# Custom pipeline function to calculate category-wise percentages
 def custom_pipeline(text):
-    results = []
-    for model_name, model in [
-        ("PII", model_pii), ("PCI", model_pci), ("PHI", model_phi), ("Medical", model_medical)
-    ]:
-        model_results = model(text)
-        model_results = clean_and_merge_tokens(model_results, thresholds[model_name], accepted_labels[model_name])
-        model_results = normalize_scores(model_results)
-        model_results = filter_overlaps(model_results)
-        for res in model_results:
-            res["entity"] = model_name
-        results.extend(model_results)
-    return resolve_conflicts(results)
+    # Run text through the models and clean results
+    pii_results = model_pii(text)
+    pii_results = [entity for entity in pii_results if entity['entity'].split("-")[-1] in accepted_pii_labels]
+    pii_results = clean_and_merge_tokens(pii_results)
 
-# Highlight text with colors
-def highlight_text(text, entities):
-    colors = {
-        "PII": "#FFA07A",  # Light Salmon
-        "PCI": "#ADD8E6",  # Light Blue
-        "PHI": "#FFD700",  # Gold (shared with Medical)
-        "Medical": "#FFD700"  # Gold
-    }
-    highlighted_text = ""
-    current_pos = 0
+    phi_results = model_phi(text)
+    phi_results = [entity for entity in phi_results if entity['entity'].split("-")[-1] in accepted_phi_labels]
+    phi_results = clean_and_merge_tokens(phi_results)
 
-    # Sort entities by start position
-    entities = sorted(entities, key=lambda x: x['start'])
-    for entity in entities:
-        category = entity['entity']
-        color = colors.get(category, "#FFFFFF")  # Default to white
-        highlighted_text += text[current_pos:entity['start']]
-        highlighted_text += f"<span style='background-color:{color}'>{text[entity['start']:entity['end']]}</span>"
-        current_pos = entity['end']
-    highlighted_text += text[current_pos:]
-    return highlighted_text
+    pci_results = model_pci(text)
+    pci_results = [entity for entity in pci_results if entity['entity'].split("-")[-1] in accepted_pci_labels]
+    pci_results = clean_and_merge_tokens(pci_results)
 
-# Categorize tokens
-def categorize_tokens(text, entities):
-    total_tokens = len(text.split())
-    categories = {"PII": 0, "PCI": 0, "PHI": 0, "Others": 0}
+    medical_results = model_medical(text)
+    medical_results = [entity for entity in medical_results if entity['entity'].split("-")[-1] in accepted_medical_labels]
+    medical_results = clean_and_merge_tokens(medical_results)
 
-    covered_positions = set()
-    for entity in entities:
-        category = "PHI" if entity['entity'] in ["PHI", "Medical"] else entity['entity']
-        categories[category] += len(text[entity['start']:entity['end']].split())
-        covered_positions.update(range(entity['start'], entity['end']))
+    # Combine all results with a label for category
+    combined_results = (
+        [("PII", result) for result in pii_results] +
+        [("PHI", result) for result in phi_results] +
+        [("PCI", result) for result in pci_results] +
+        [("Medical", result) for result in medical_results]
+    )
 
-    uncovered_tokens = [word for i, word in enumerate(text.split()) if i not in covered_positions]
-    categories["Others"] += len(uncovered_tokens)
-
-    percentages = {key: (count / total_tokens) * 100 for key, count in categories.items()}
-    return percentages
+    return combined_results
 
 # Streamlit App layout
 st.title("Document Classification and NER")
 
+# Input text
 input_text = st.text_area("Enter text for classification and NER:")
 
+# Add a button to trigger classification and NER
 if st.button("Classify and Extract Entities"):
     if input_text:
+        # Perform NER
         ner_results = custom_pipeline(input_text)
 
-        st.subheader("Highlighted Text with Entities:")
-        highlighted_html = highlight_text(input_text, ner_results)
-        st.markdown(highlighted_html, unsafe_allow_html=True)
+        # Calculate percentages for each category
+        category_counts = {"PII": 0, "PHI": 0, "PCI": 0, "Medical": 0, "Others": 0}
+        total_entities = len(ner_results)
 
-        st.subheader("Extracted Entities:")
+        for category, entity in ner_results:
+            if category in category_counts:
+                category_counts[category] += 1
+            else:
+                category_counts["Others"] += 1
+
+        percentages = {key: (count / total_entities) * 100 if total_entities > 0 else 0 for key, count in category_counts.items()}
+
+        # Display percentages
+        st.subheader("Entity Category Percentages:")
+        for category, percentage in percentages.items():
+            st.write(f"{category}: {percentage:.2f}%")
+
+        # Display detailed entity results
+        st.subheader("Named Entities:")
         if ner_results:
             table_data = [{
                 "Entity": entity['word'],
-                "Entity Type": entity['entity'],
-                "Start": entity['start'],
-                "End": entity['end'],
+                "Category": category,
+                "Entity Type": entity['entity'].split("-")[-1],
                 "Confidence (%)": f"{entity['score'] * 100:.2f}"
-            } for entity in ner_results]
-            st.table(pd.DataFrame(table_data))
+            } for category, entity in ner_results]
+            results_table = pd.DataFrame(table_data)
+            st.table(results_table)
         else:
             st.write("No entities detected.")
-
-        st.subheader("Category Percentages:")
-        percentages = categorize_tokens(input_text, ner_results)
-        for category, percentage in percentages.items():
-            st.write(f"{category}: {percentage:.2f}%")
     else:
         st.write("Please enter some text for classification and NER.")
