@@ -78,7 +78,7 @@ def highlight_text(text, entities):
     colors = {
         "PII": "#FFA07A",  # Light Salmon
         "PCI": "#ADD8E6",  # Light Blue
-        "PHI": "#FFD700",  # Gold (shared with Medical)
+        # Gold (shared with Medical)
         "Medical": "#FFD700"  # Gold
     }
     highlighted_text = ""
@@ -98,13 +98,10 @@ def highlight_text(text, entities):
 # Categorize tokens
 def categorize_tokens(text, entities):
     total_tokens = len(text.split())
-    categories = {"PII": 0, "PCI": 0, "PHI": 0, "Others": 0}
+    categories = {"PII": 0, "PCI": 0,  "Others": 0}
 
     covered_positions = set()
-    for entity in entities:
-        category = "PHI" if entity['entity'] in ["PHI", "Medical"] else entity['entity']
-        categories[category] += len(text[entity['start']:entity['end']].split())
-        covered_positions.update(range(entity['start'], entity['end']))
+   
 
     uncovered_tokens = [word for i, word in enumerate(text.split()) if i not in covered_positions]
     categories["Others"] += len(uncovered_tokens)
