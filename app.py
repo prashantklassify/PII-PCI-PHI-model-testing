@@ -6,6 +6,7 @@ import pandas as pd
 models = {
     "PII": "iiiorg/piiranha-v1-detect-personal-information",
     "PCI": "lakshyakh93/deberta_finetuned_pii",
+    "PHI": "obi/deid_roberta_i2b2",
     "Medical NER": "blaze999/Medical-NER"
 }
 
@@ -19,7 +20,9 @@ accepted_labels = {
             "CREDITCARDNUMBER", "VEHICLEVIN", "AMOUNT", "CURRENCY", "PASSWORD",
             "PHONEIMEI", "CURRENCYSYMBOL", "CURRENCYNAME", "CURRENCYCODE",
             "LITECOINADDRESS", "MAC", "CREDITCARDISSUER", "CREDITCARDCVV",
-            "NEARBYGPSCOORDINATE", "SEXTYPE"},"Medical": {"BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT",
+            "NEARBYGPSCOORDINATE", "SEXTYPE"},
+    "PHI": {"staff", "HOSP", "AGE"},
+    "Medical": {"BIOLOGICAL_ATTRIBUTE", "BIOLOGICAL_STRUCTURE", "CLINICAL_EVENT",
                 "DISEASE_DISORDER", "DOSAGE", "FAMILY_HISTORY", "LAB_VALUE", "MASS",
                 "MEDICATION", "OUTCOME", "SIGN_SYMPTOM", "THERAPUTIC_PROCEDURE"}
 }
@@ -27,13 +30,14 @@ accepted_labels = {
 # Load models
 model_pii = pipeline("token-classification", model=models["PII"])
 model_pci = pipeline("token-classification", model=models["PCI"])
+model_phi = pipeline("token-classification", model=models["PHI"])
 model_medical = pipeline("token-classification", model=models["Medical NER"])
 
 # Threshold sliders
 thresholds = {
     "PII": st.slider("Confidence Threshold for PII Model", 0.0, 1.0, 0.75, 0.05),
     "PCI": st.slider("Confidence Threshold for PCI Model", 0.0, 1.0, 0.75, 0.05),
-    
+    "PHI": st.slider("Confidence Threshold for PHI Model", 0.0, 1.0, 0.75, 0.05),
     "Medical": st.slider("Confidence Threshold for Medical NER Model", 0.0, 1.0, 0.75, 0.05),
 }
 
@@ -78,7 +82,7 @@ def highlight_text(text, entities):
     colors = {
         "PII": "#FFA07A",  # Light Salmon
         "PCI": "#ADD8E6",  # Light Blue
-        # Gold (shared with Medical)
+        "PHI": "#FFD700",  # Gold (shared with Medical)
         "Medical": "#FFD700"  # Gold
     }
     highlighted_text = ""
@@ -98,10 +102,13 @@ def highlight_text(text, entities):
 # Categorize tokens
 def categorize_tokens(text, entities):
     total_tokens = len(text.split())
-    categories = {"PII": 0, "PCI": 0,  "Others": 0}
+    categories = {"PII": 0, "PCI": 0, "PHI": 0, "Others": 0}
 
     covered_positions = set()
-   
+    for entity in entities:
+        category = "PHI" if entity['entity'] in ["PHI", "Medical"] else entity['entity']
+        categories[category] += len(text[entity['start']:entity['end']].split())
+        covered_positions.update(range(entity['start'], entity['end']))
 
     uncovered_tokens = [word for i, word in enumerate(text.split()) if i not in covered_positions]
     categories["Others"] += len(uncovered_tokens)
