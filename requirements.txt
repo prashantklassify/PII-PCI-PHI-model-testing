@@ -1,9 +1,2 @@
 streamlit
-transformers
-torch
-scikit-learn
-numpy
-pandas
-sentence-transformers
-random2
 gliner
