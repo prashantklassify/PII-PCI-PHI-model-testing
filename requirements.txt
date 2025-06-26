@@ -7,4 +7,3 @@ pandas
 sentence-transformers
 random2
 gliner
-re
